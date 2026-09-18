@@ -1,0 +1,1 @@
+import React from 'react'; import {View, Text} from 'react-native'; export const SalesExecutiveDealsScreen = () => <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}><Text>SalesExecutiveDealsScreen</Text></View>;
