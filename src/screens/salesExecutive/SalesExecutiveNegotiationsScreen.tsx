@@ -1,0 +1,165 @@
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { AppHeader } from '../../components/common/AppHeader';
+import { colors } from '../../theme/colors';
+import { typography } from '../../theme/typography';
+import { spacing } from '../../theme/spacing';
+
+export const SalesExecutiveNegotiationsScreen = () => {
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [negotiations, setNegotiations] = useState<any[]>([]);
+
+  const renderNegotiationCard = ({ item }: { item: any }) => (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <View>
+          <Text style={styles.cardTitle}>{item.leadName}</Text>
+          <Text style={styles.cardSubtitle}>{item.project}</Text>
+        </View>
+        <View style={styles.statusBadge}>
+          <Text style={styles.statusText}>{item.status.replace('_', ' ').toUpperCase()}</Text>
+        </View>
+      </View>
+      <View style={styles.cardBody}>
+        <View style={styles.detailRow}>
+          <Icon name="calendar" size={16} color={colors.textSecondary} />
+          <Text style={styles.detailText}>{item.date}</Text>
+        </View>
+        <View style={styles.detailRow}>
+          <Icon name="account-tie" size={16} color={colors.textSecondary} />
+          <Text style={styles.detailText}>{item.executive}</Text>
+        </View>
+        <View style={styles.detailRow}>
+          <Icon name="cash-multiple" size={16} color={colors.textSecondary} />
+          <Text style={styles.detailText}>Offered: {item.offeredPrice}</Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={[styles.container]}>
+      <AppHeader leftIcon="arrow-left" onLeftPress={() => navigation.goBack()} title="Negotiations" />
+      
+      <View style={styles.content}>
+
+        <FlatList
+          data={negotiations}
+          keyExtractor={(item, index) => index.toString()}
+          renderItem={renderNegotiationCard}
+          contentContainerStyle={styles.listContainer}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Icon name="handshake-outline" size={48} color={colors.textSecondary} style={{ marginBottom: spacing.m, opacity: 0.5 }} />
+              <Text style={styles.emptyStateText}>No negotiations found.</Text>
+            </View>
+          }
+        />
+        
+        <TouchableOpacity style={styles.fab} onPress={() => setIsModalVisible(true)} activeOpacity={0.8}>
+          <Icon name="plus" size={24} color="#FFF" style={{marginRight: 8}} />
+          <Text style={styles.fabText}>Start Negotiation</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Start Negotiation Modal */}
+      <Modal
+        visible={isModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setIsModalVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsModalVisible(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
+            
+            <View style={styles.modalHeader}>
+              <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                <Icon name="handshake" size={24} color="#FFF" style={{marginRight: 8}} />
+                <Text style={styles.modalTitle}>Select Lead to Start Negotiation</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsModalVisible(false)}>
+                <Icon name="close" size={24} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={styles.inputLabel}>SELECT LEAD <Text style={{color: '#EF4444'}}>*</Text></Text>
+              <View style={styles.selectBox}>
+                <Text style={styles.selectBoxText}>-- Choose a Lead --</Text>
+                <Icon name="chevron-down" size={20} color={colors.textSecondary} />
+              </View>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.proceedBtn} onPress={() => {
+                  setIsModalVisible(false);
+                }}>
+                  <Text style={styles.proceedBtnText}>Proceed to Negotiate →</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsModalVisible(false)}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F3F4F6' },
+  content: { flex: 1 },
+  fab: {
+    position: 'absolute',
+    bottom: '10%',
+    right: 24,
+    backgroundColor: '#D97706',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 30,
+    shadowColor: '#D97706',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  fabText: { color: '#FFF', fontWeight: 'bold', fontSize: typography.sizes.m },
+  
+  listContainer: { padding: spacing.m },
+  card: { backgroundColor: '#FFF', borderRadius: 8, padding: spacing.m, marginBottom: spacing.m, borderWidth: 1, borderColor: colors.border },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.m },
+  cardTitle: { fontSize: typography.sizes.m, fontWeight: 'bold', color: colors.text },
+  cardSubtitle: { fontSize: typography.sizes.s, color: colors.textSecondary, marginTop: 2 },
+  statusBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
+  statusText: { fontSize: 10, fontWeight: 'bold', color: '#D97706' },
+  cardBody: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.m, gap: 8 },
+  detailRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  detailText: { fontSize: typography.sizes.s, color: colors.text },
+
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, backgroundColor: '#FFF', borderRadius: 8, borderWidth: 1, borderColor: colors.border },
+  emptyStateText: { fontSize: typography.sizes.m, color: colors.textSecondary },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' },
+  modalHeader: { backgroundColor: '#4B88BD', padding: spacing.l, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  modalTitle: { color: '#FFF', fontSize: typography.sizes.m, fontWeight: 'bold' },
+  modalBody: { padding: spacing.xl },
+  inputLabel: { fontSize: typography.sizes.s, fontWeight: 'bold', color: colors.textSecondary, marginBottom: spacing.s },
+  selectBox: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.m, height: 48, marginBottom: spacing.xl },
+  selectBoxText: { fontSize: typography.sizes.m, color: colors.text },
+  modalActions: { gap: spacing.m, marginTop: spacing.l },
+  proceedBtn: { backgroundColor: '#D97706', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  proceedBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: typography.sizes.m },
+  cancelBtn: { paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  cancelBtnText: { color: colors.textSecondary, fontWeight: 'bold', fontSize: typography.sizes.m },
+});

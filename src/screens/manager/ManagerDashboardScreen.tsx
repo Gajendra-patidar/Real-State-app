@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Platform,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useAuth} from '../../hooks/useAuth';
@@ -34,8 +35,7 @@ import {
   Target,
   Activity,
 } from 'lucide-react-native';
-
-const {width: SCREEN_WIDTH} = Dimensions.get('window');
+import {useResponsive} from '../../hooks/useResponsive';
 
 const getFormattedDate = () => {
   const options: Intl.DateTimeFormatOptions = {
@@ -61,9 +61,10 @@ interface KpiCardProps {
   icon: React.ReactNode;
   accent: string;
   accentBg: string;
+  width?: number;
 }
-const KpiCard: React.FC<KpiCardProps> = ({label, value, sub, icon, accent, accentBg}) => (
-  <View style={[styles.kpiCard, {borderLeftColor: accent, borderLeftWidth: 4}]}>
+const KpiCard: React.FC<KpiCardProps> = ({label, value, sub, icon, accent, accentBg, width}) => (
+  <View style={[styles.kpiCard, {borderLeftColor: accent, borderLeftWidth: 4}, width ? {width} : {}]}>
     <View style={[styles.kpiIconWrap, {backgroundColor: accentBg}]}>{icon}</View>
     <Text style={styles.kpiLabel}>{label}</Text>
     <Text style={[styles.kpiValue, {color: accent}]}>{value}</Text>
@@ -168,10 +169,15 @@ const ExecCard: React.FC<ExecCardProps> = ({name, role, assigned, booked, conver
   );
 };
 
+import {useNavigation} from '@react-navigation/native';
+import {NativeStackNavigationProp} from '@react-navigation/native-stack';
+
 // ─── Main Screen ───────────────────────────────────────────────────────────
 export const ManagerDashboardScreen = () => {
   const {user} = useAuth();
+  const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth, isTablet, isLandscape } = useResponsive();
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [executives, setExecutives] = useState<any[]>([]);
@@ -188,14 +194,30 @@ export const ManagerDashboardScreen = () => {
       let dData: any = null, eData: any[] = [], lData: any[] = [];
 
       try {
-        const r = await dashboardApi.getManagerDashboard(timeFilter.toLowerCase().replace(' ', '_'));
-        dData = r.dashboard;
+        let r = await dashboardApi.getManagerDashboard(timeFilter.toLowerCase().replace(' ', '_'));
+        console.log("dashboard data", r);
+        
+        // Handle case where backend returns stringified JSON
+        if (typeof r === 'string') {
+          try {
+            r = JSON.parse(r);
+          } catch (e) {
+            console.warn("Could not parse dashboard data string", e);
+          }
+        }
+        
+        dData = r?.dashboard || r?.data?.dashboard || r;
       } catch {
         dData = {total_assigned_leads: 12, new_leads: 10, site_visits_upcoming: 1, in_progress_leads: 1, total_bookings: 0};
       }
       try {
-        const r = await dashboardApi.getManagerExecutives();
-        eData = r.data?.data || [];
+        let r = await dashboardApi.getManagerExecutives();
+        console.log("sales team data: ", r);
+        
+        if (typeof r === 'string') {
+          try { r = JSON.parse(r); } catch (e) {}
+        }
+        eData = r?.data?.data || r?.data || r || [];
       } catch {
         eData = [
           {id: 1, name: 'Vikram Singh',  role: {name: 'Sales Executive'}, total_leads: 8, converted_leads: 3},
@@ -204,8 +226,11 @@ export const ManagerDashboardScreen = () => {
         ];
       }
       try {
-        const r = await dashboardApi.getRecentLeads({per_page: 5});
-        lData = r.data?.data || [];
+        let r = await dashboardApi.getRecentLeads({per_page: 5});
+        if (typeof r === 'string') {
+          try { r = JSON.parse(r); } catch (e) {}
+        }
+        lData = r?.data?.data || r?.data || r || [];
       } catch {
         lData = [
           {id: 101, lead_code: 'LD-8801', first_name: 'Amit',   last_name: 'Kulkarni', phone: '9988776655', status: 'SITE VISIT',  project: {name: 'Apex Grand Residency'}, user: {name: 'Vikram Singh'}},
@@ -236,8 +261,14 @@ export const ManagerDashboardScreen = () => {
   const totalLeads = dashboardData?.total_assigned_leads || 0;
   const newLeads   = dashboardData?.new_leads || 0;
 
+  // Calculate dynamic KPI Card width based on tablet vs phone
+  // kpiGrid has paddingHorizontal: 12 (24 total padding) and gap: 10
+  const kpiColumns = isTablet ? (isLandscape ? 4 : 3) : 2;
+  const totalGapWidth = (kpiColumns - 1) * 10;
+  const kpiCardWidth = (screenWidth - 24 - totalGapWidth) / kpiColumns;
+
   return (
-    <View style={[styles.root, {paddingTop: insets.top}]}>
+    <View style={[styles.root, {paddingTop: Platform.OS === 'ios' ? 0 : 0}]}>
 
       {/* ── Premium Header ────────────────────────────────────────── */}
       <View style={styles.header}>
@@ -251,7 +282,7 @@ export const ManagerDashboardScreen = () => {
             <Text style={styles.headerDate}>{getFormattedDate()} • Manager</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.bellBtn}>
+        <TouchableOpacity style={styles.bellBtn} onPress={() => navigation.navigate('Notifications')}>
           <Bell size={20} color={colors.primary} />
           <View style={styles.bellDot} />
         </TouchableOpacity>
@@ -276,11 +307,14 @@ export const ManagerDashboardScreen = () => {
           </View>
           {/* Quick Actions */}
           <View style={styles.heroActions}>
-            <TouchableOpacity style={styles.heroPrimaryBtn}>
+            <TouchableOpacity 
+              style={styles.heroPrimaryBtn}
+              onPress={() => navigation.navigate('Leads')}
+            >
               <Plus size={16} color={colors.primary} />
               <Text style={styles.heroPrimaryBtnText}>Add Lead</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.heroSecondaryBtn}>
+            <TouchableOpacity style={styles.heroSecondaryBtn} onPress={() => navigation.navigate('Reports')} >
               <Activity size={16} color="rgba(255,255,255,0.85)" />
               <Text style={styles.heroSecondaryBtnText}>Team Report</Text>
             </TouchableOpacity>
@@ -312,6 +346,7 @@ export const ManagerDashboardScreen = () => {
             icon={<TrendingUp size={18} color={colors.success} />}
             accent={colors.success}
             accentBg={colors.successLight}
+            width={kpiCardWidth}
           />
           <KpiCard
             label="NEW INQUIRIES"
@@ -320,6 +355,7 @@ export const ManagerDashboardScreen = () => {
             icon={<Inbox size={18} color={colors.secondary} />}
             accent={colors.secondary}
             accentBg={colors.infoLight}
+            width={kpiCardWidth}
           />
           <KpiCard
             label="SITE VISITS"
@@ -328,6 +364,7 @@ export const ManagerDashboardScreen = () => {
             icon={<MapPin size={18} color={colors.warning} />}
             accent={colors.warning}
             accentBg={colors.warningLight}
+            width={kpiCardWidth}
           />
           <KpiCard
             label="NEGOTIATIONS"
@@ -336,6 +373,7 @@ export const ManagerDashboardScreen = () => {
             icon={<Handshake size={18} color={colors.accent} />}
             accent={colors.accent}
             accentBg={colors.purpleLight}
+            width={kpiCardWidth}
           />
           <KpiCard
             label="BOOKED DEALS"
@@ -344,6 +382,7 @@ export const ManagerDashboardScreen = () => {
             icon={<Trophy size={18} color={colors.accentGold} />}
             accent={colors.accentGold}
             accentBg={colors.warningLight}
+            width={kpiCardWidth}
           />
           <KpiCard
             label="TEAM TARGET"
@@ -352,6 +391,7 @@ export const ManagerDashboardScreen = () => {
             icon={<Target size={18} color={colors.purple} />}
             accent={colors.purple}
             accentBg={colors.purpleLight}
+            width={kpiCardWidth}
           />
         </View>
 
@@ -367,7 +407,7 @@ export const ManagerDashboardScreen = () => {
                 <Text style={styles.sectionSub}>Active executive workload & conversion</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.viewAllPill}>
+            <TouchableOpacity style={styles.viewAllPill} onPress={() => navigation.navigate('Teams')} >
               <Text style={styles.viewAllPillText}>Roster</Text>
               <ChevronRight size={14} color={colors.secondary} />
             </TouchableOpacity>
@@ -405,7 +445,7 @@ export const ManagerDashboardScreen = () => {
                 <Text style={styles.sectionSub}>Real-time status tracking</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.viewAllPill}>
+            <TouchableOpacity style={styles.viewAllPill} onPress={() => navigation.navigate('Leads')}>
               <Text style={styles.viewAllPillText}>View All</Text>
               <ChevronRight size={14} color={colors.secondary} />
             </TouchableOpacity>
@@ -419,20 +459,25 @@ export const ManagerDashboardScreen = () => {
           ) : (
             recentLeads.map((lead, idx) => (
               <View key={lead.id}>
-                <LeadRow
-                  name={`${lead.first_name || ''} ${lead.last_name || ''}`.trim()}
-                  code={lead.lead_code}
-                  phone={lead.phone}
-                  property={lead.project?.name || 'Any'}
-                  executive={lead.user?.name || 'Unassigned'}
-                  status={lead.status}
-                />
+                <TouchableOpacity 
+                  activeOpacity={0.7} 
+                  onPress={() => navigation.navigate('ManagerLeadDetails', { leadId: lead.id })}
+                >
+                  <LeadRow
+                    name={`${lead.first_name || ''} ${lead.last_name || ''}`.trim()}
+                    code={lead.lead_code}
+                    phone={lead.phone}
+                    property={lead.project?.name || 'Any'}
+                    executive={lead.user?.name || 'Unassigned'}
+                    status={lead.status}
+                  />
+                </TouchableOpacity>
                 {idx < recentLeads.length - 1 && <View style={styles.rowDivider} />}
               </View>
             ))
           )}
 
-          <TouchableOpacity style={styles.viewAllBtn}>
+          <TouchableOpacity style={styles.viewAllBtn} onPress={() => navigation.navigate('Leads')}>
             <Text style={styles.viewAllText}>View All Leads</Text>
             <ChevronRight size={16} color={colors.secondary} />
           </TouchableOpacity>
@@ -496,7 +541,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: colors.primary,
-    maxWidth: SCREEN_WIDTH * 0.5,
+    maxWidth: 200,
   },
   headerDate: {
     fontSize: 10,
@@ -654,7 +699,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   kpiCard: {
-    width: (SCREEN_WIDTH - 24 - 10) / 2,
     backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 16,

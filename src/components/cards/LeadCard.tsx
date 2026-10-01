@@ -14,6 +14,10 @@ interface LeadCardProps {
   assignedExecutive: string;
   status: string;
   onViewPress: () => void;
+  onCallLogPress?: () => void;
+  onStatusPress?: () => void;
+  onActionPress?: () => void;
+  onHistoryPress?: () => void;
 }
 
 export const LeadCard: React.FC<LeadCardProps> = ({
@@ -25,6 +29,10 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   assignedExecutive,
   status,
   onViewPress,
+  onCallLogPress,
+  onStatusPress,
+  onActionPress,
+  onHistoryPress,
 }) => {
   const getStatusColor = () => {
     switch ((status || '').toUpperCase()) {
@@ -50,7 +58,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
         </View>
         <TouchableOpacity style={styles.viewBtn} onPress={onViewPress}>
           <Icon name="eye-outline" size={16} color={colors.textSecondary} />
-          <Text style={styles.viewText}>View</Text>
+          <Text style={styles.viewText}>Details</Text>
         </TouchableOpacity>
       </View>
       
@@ -73,9 +81,35 @@ export const LeadCard: React.FC<LeadCardProps> = ({
       </View>
 
       <View style={styles.footer}>
-        <View style={[styles.statusBadge, {backgroundColor: getStatusColor() + '20'}]}>
-          <Text style={[styles.statusText, {color: getStatusColor()}]}>{status}</Text>
-        </View>
+        <TouchableOpacity 
+          style={[styles.statusBadge, {backgroundColor: getStatusColor() + '20'}]}
+          onPress={onStatusPress}
+          disabled={!onStatusPress}
+        >
+          <Text style={[styles.statusText, {color: getStatusColor()}]}>
+            {status} {onStatusPress && '▼'}
+          </Text>
+        </TouchableOpacity>
+
+        {onCallLogPress && (
+          <TouchableOpacity style={styles.actionBtn} onPress={onCallLogPress}>
+            <Icon name="phone" size={14} color={colors.primary} />
+            <Text style={styles.actionBtnText}>Call Log</Text>
+          </TouchableOpacity>
+        )}
+
+        {onActionPress && (
+          <TouchableOpacity style={styles.actionBtn} onPress={onActionPress}>
+            <Icon name="lightning-bolt" size={14} color={colors.warning} />
+            <Text style={styles.actionBtnText}>Actions</Text>
+          </TouchableOpacity>
+        )}
+
+        {onHistoryPress && (
+          <TouchableOpacity style={[styles.actionBtn, { paddingHorizontal: spacing.s, paddingVertical: 4 }]} onPress={onHistoryPress}>
+            <Icon name="history" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -167,16 +201,37 @@ const styles = StyleSheet.create({
   },
   footer: {
     marginTop: spacing.xs,
-    alignItems: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s,
+    flexWrap: 'wrap',
   },
   statusBadge: {
     paddingHorizontal: spacing.s,
     paddingVertical: 4,
     borderRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   statusText: {
     fontSize: typography.sizes.xs,
     fontWeight: typography.weights.bold,
     textTransform: 'uppercase',
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.s,
+    paddingVertical: 4,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 4,
+  },
+  actionBtnText: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    fontWeight: typography.weights.medium,
   },
 });

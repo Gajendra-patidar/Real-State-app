@@ -5,7 +5,7 @@ import {logout} from '../../store/slices/authSlice';
 
 // API Configuration
 // Replace with the actual domain or use env variables
-const API_BASE_URL = 'https://white-cheetah-177108.hostingersite.com/api'; 
+const API_BASE_URL = 'https://urbanproperty.in/api'; 
 
 const api = axios.create({
   baseURL: API_BASE_URL,

@@ -1,5 +1,5 @@
 import React from 'react';
-import {View, Text, StyleSheet, TouchableOpacity} from 'react-native';
+import {View, Text, StyleSheet, TouchableOpacity, Platform} from 'react-native';
 import {useDispatch} from 'react-redux';
 import {logout} from '../../store/slices/authSlice';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -58,7 +58,7 @@ export const ManagerMoreScreen = () => {
   );
 
   return (
-    <View style={[styles.container, {paddingBottom: insets.bottom + 16}]}>
+    <View style={[styles.container, {paddingBottom: Platform.OS === 'ios' ? 0 : insets.bottom + 16}]}>
       <Text style={styles.title}>More Options</Text>
 
       <View style={styles.section}>

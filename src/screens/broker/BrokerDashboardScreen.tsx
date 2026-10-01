@@ -35,8 +35,7 @@ import {
   Eye,
   Sparkles,
 } from 'lucide-react-native';
-
-const {width: SCREEN_WIDTH} = Dimensions.get('window');
+import {useResponsive} from '../../hooks/useResponsive';
 
 const getFormattedDate = () => {
   const options: Intl.DateTimeFormatOptions = {
@@ -65,9 +64,10 @@ interface KpiCardProps {
   icon: React.ReactNode;
   accent: string;
   accentBg: string;
+  width?: number;
 }
-const KpiCard: React.FC<KpiCardProps> = ({label, value, sub, icon, accent, accentBg}) => (
-  <View style={[styles.kpiCard, {borderLeftColor: accent, borderLeftWidth: 4}]}>
+const KpiCard: React.FC<KpiCardProps> = ({label, value, sub, icon, accent, accentBg, width}) => (
+  <View style={[styles.kpiCard, {borderLeftColor: accent, borderLeftWidth: 4}, width ? {width} : {}]}>
     <View style={[styles.kpiIconWrap, {backgroundColor: accentBg}]}>{icon}</View>
     <Text style={styles.kpiLabel}>{label}</Text>
     <Text style={[styles.kpiValue, {color: accent}]}>{value}</Text>
@@ -166,6 +166,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({city, unitsFree, name, onPrevi
 export const BrokerDashboardScreen = () => {
   const {user} = useAuth();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth, isTablet, isLandscape } = useResponsive();
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [recentLeads, setRecentLeads] = useState<any[]>([]);
@@ -226,8 +227,12 @@ export const BrokerDashboardScreen = () => {
   const partnerName = user?.name || 'Channel Partner';
   const firstName = partnerName.split(' ')[0];
 
+  const kpiColumns = isTablet ? (isLandscape ? 4 : 3) : 2;
+  const totalGapWidth = (kpiColumns - 1) * 10;
+  const kpiCardWidth = (screenWidth - 24 - totalGapWidth) / kpiColumns;
+
   return (
-    <View style={[styles.root, {paddingTop: insets.top}]}>
+    <View style={[styles.root]}>
       {/* ── Premium Header ────────────────────────────────────────── */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -303,6 +308,7 @@ export const BrokerDashboardScreen = () => {
             icon={<TrendingUp size={18} color={colors.success} />}
             accent={colors.success}
             accentBg={colors.successLight}
+            width={kpiCardWidth}
           />
           <KpiCard
             label="APPROVED PAYOUTS"
@@ -311,6 +317,7 @@ export const BrokerDashboardScreen = () => {
             icon={<CheckCircle size={18} color={colors.secondary} />}
             accent={colors.secondary}
             accentBg={colors.infoLight}
+            width={kpiCardWidth}
           />
           <KpiCard
             label="SUBMITTED LEADS"
@@ -319,6 +326,7 @@ export const BrokerDashboardScreen = () => {
             icon={<Users size={18} color={colors.accent} />}
             accent={colors.accent}
             accentBg={colors.purpleLight}
+            width={kpiCardWidth}
           />
           <KpiCard
             label="PARTNER RATE"
@@ -327,6 +335,7 @@ export const BrokerDashboardScreen = () => {
             icon={<Tag size={18} color={colors.accentGold} />}
             accent={colors.accentGold}
             accentBg={colors.warningLight}
+            width={kpiCardWidth}
           />
         </View>
 
@@ -457,7 +466,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: colors.primary,
-    maxWidth: SCREEN_WIDTH * 0.5,
+    maxWidth: 200,
   },
   headerDate: {
     fontSize: 10,
@@ -621,7 +630,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   kpiCard: {
-    width: (SCREEN_WIDTH - 24 - 10) / 2,
     backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 16,

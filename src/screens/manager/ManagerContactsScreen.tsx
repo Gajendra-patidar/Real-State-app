@@ -62,7 +62,7 @@ export const ManagerContactsScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container} >
       <AppHeader title="Team Roster" />
       {loading && team.length === 0 ? (
         <View style={styles.loader}>
@@ -78,7 +78,7 @@ export const ManagerContactsScreen = () => {
           onRefresh={fetchTeam}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 

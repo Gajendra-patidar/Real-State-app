@@ -71,7 +71,7 @@ export const ManagerPropertiesScreen = () => {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <AppHeader title="Projects Catalog" />
       {loading && projects.length === 0 ? (
         <View style={styles.loader}>
@@ -87,7 +87,7 @@ export const ManagerPropertiesScreen = () => {
           onRefresh={fetchProjects}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 

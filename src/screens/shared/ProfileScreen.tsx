@@ -12,9 +12,11 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useDispatch} from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {useNavigation} from '@react-navigation/native';
 import {logout} from '../../store/slices/authSlice';
 import {useAuth} from '../../hooks/useAuth';
 import {authApi} from '../../services/api/authApi';
+import {AppHeader} from '../../components/common/AppHeader';
 import {colors} from '../../theme/colors';
 import {typography} from '../../theme/typography';
 import {spacing} from '../../theme/spacing';
@@ -45,6 +47,7 @@ const ROLE_LABELS: Record<string, {label: string; color: string; bg: string}> = 
 };
 
 export const ProfileScreen = () => {
+  const navigation = useNavigation<any>();
   const dispatch = useDispatch();
   const insets = useSafeAreaInsets();
   const {user, role} = useAuth();
@@ -146,7 +149,8 @@ export const ProfileScreen = () => {
   );
 
   return (
-    <View style={[styles.root, {paddingTop: insets.top}]}>
+    <View style={[styles.root]}>
+      <AppHeader title="Profile" leftIcon="arrow-left" onLeftPress={() => navigation.goBack()} />
       <ScrollView showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scroll, {paddingBottom: insets.bottom + 24}]}>
 

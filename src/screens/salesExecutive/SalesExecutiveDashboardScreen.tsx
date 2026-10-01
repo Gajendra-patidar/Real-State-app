@@ -1,3 +1,4 @@
+import { useNavigation } from "@react-navigation/native";
 import React, {useEffect, useState} from 'react';
 import {
   View,
@@ -125,15 +126,7 @@ const LeadCardRow: React.FC<LeadCardRowProps> = ({name, code, phone, property, s
       <View style={styles.leadActions}>
         <TouchableOpacity style={styles.actionBtnOutline} onPress={onView}>
           <Eye size={13} color={colors.secondary} />
-          <Text style={styles.actionBtnOutlineText}>View</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtnOutline}>
-          <MessageCircle size={13} color={colors.success} />
-          <Text style={[styles.actionBtnOutlineText, {color: colors.success}]}>Note</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtnSolid}>
-          <Phone size={13} color={colors.surface} />
-          <Text style={styles.actionBtnSolidText}>Call</Text>
+          <Text style={styles.actionBtnOutlineText}>View Lead Details</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -143,6 +136,7 @@ const LeadCardRow: React.FC<LeadCardRowProps> = ({name, code, phone, property, s
 // ─── Main Screen ──────────────────────────────────────────────────────────
 export const SalesExecutiveDashboardScreen = () => {
   const {user} = useAuth();
+  const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
@@ -160,25 +154,24 @@ export const SalesExecutiveDashboardScreen = () => {
       let lData: any[] = [];
 
       try {
-        const r = await salesExecutiveApi.getDashboard(timeFilter.toLowerCase().replace(' ', '_'));
-        dData = r.dashboard;
+        console.log("sales dasborad");
+        let r = await salesExecutiveApi.getDashboard(timeFilter.toLowerCase().replace(' ', '_'));
+        if (typeof r === 'string') {
+          try { r = JSON.parse(r); } catch (e) {}
+        }
+        dData = r?.dashboard || r;
       } catch {
-        dData = {
-          assigned_leads_count: 3,
-          site_visits_count: 1,
-          converted_bookings: 0,
-        };
+        dData = null;
       }
 
       try {
-        const r = await salesExecutiveApi.getAssignedLeads({per_page: 10});
-        lData = r.data?.data || r.data || [];
+        let r = await salesExecutiveApi.getAssignedLeads({per_page: 10});
+        if (typeof r === 'string') {
+          try { r = JSON.parse(r); } catch (e) {}
+        }
+        lData = r?.data?.data || r?.data || r || [];
       } catch {
-        lData = [
-          {id: 1, first_name: 'Krishna', last_name: 'Kumar',   lead_code: 'LD-BRK2728', phone: '5555555555', project: {name: 'Apex Grand Residency'}, status: 'NEGOTIATION'},
-          {id: 2, first_name: 'Amit',    last_name: 'Kulkarni', lead_code: 'LD-8801',    phone: '9988776655', project: {name: 'Apex Grand Residency'}, status: 'SITE VISIT'},
-          {id: 3, first_name: 'Suresh',  last_name: 'Reddy',    lead_code: 'LD-8802',    phone: '9123456789', project: {name: 'Apex Grand Residency'}, status: 'NEGOTIATION'},
-        ];
+        lData = [];
       }
 
       setDashboardData(dData);
@@ -199,10 +192,12 @@ export const SalesExecutiveDashboardScreen = () => {
   }
 
   const firstName = (user?.name || 'Executive').split(' ')[0];
-  const assignedCount = dashboardData?.assigned_leads_count || 0;
+  const assignedCount = dashboardData?.total_assigned_leads || dashboardData?.assigned_leads_count || 0;
+  const siteVisits = (dashboardData?.site_visits_today || 0) + (dashboardData?.site_visits_upcoming || 0);
+  const convertedBookings = dashboardData?.total_bookings || convertedBookings;
 
   return (
-    <View style={[styles.root, {paddingTop: insets.top}]}>
+    <View style={[styles.root]}>
 
       {/* ── Header ──────────────────────────────────────────────────── */}
       <View style={styles.header}>
@@ -216,7 +211,7 @@ export const SalesExecutiveDashboardScreen = () => {
             <Text style={styles.headerDate}>{getFormattedDate()} • Sales Executive</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.bellBtn}>
+        <TouchableOpacity style={styles.bellBtn} onPress={() => navigation.navigate('Notifications')}>
           <Bell size={20} color={colors.primary} />
           <View style={styles.bellDot} />
         </TouchableOpacity>
@@ -230,7 +225,7 @@ export const SalesExecutiveDashboardScreen = () => {
             <View style={styles.heroBadge}>
               <Sparkles size={12} color={colors.accentGold} />
               <Text style={styles.heroBadgeText}>
-                {assignedCount} Assigned · {dashboardData?.site_visits_count || 0} Site Visits
+                {assignedCount} Assigned · {siteVisits} Site Visits
               </Text>
             </View>
             <Text style={styles.heroTitle}>Sales Executive{'\n'}Workspace</Text>
@@ -242,11 +237,11 @@ export const SalesExecutiveDashboardScreen = () => {
             </View>
           </View>
           <View style={styles.heroActions}>
-            <TouchableOpacity style={styles.heroPrimaryBtn}>
+            <TouchableOpacity style={styles.heroPrimaryBtn} onPress={() => navigation.navigate('Leads')}>
               <Plus size={16} color={colors.primary} />
               <Text style={styles.heroPrimaryBtnText}>Add Customer Lead</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.heroSecondaryBtn}>
+            <TouchableOpacity style={styles.heroSecondaryBtn} onPress={() => navigation.navigate('Leads')}>
               <ClipboardList size={16} color="rgba(255,255,255,0.85)" />
               <Text style={styles.heroSecondaryBtnText}>Open Pipeline</Text>
             </TouchableOpacity>
@@ -281,7 +276,7 @@ export const SalesExecutiveDashboardScreen = () => {
           />
           <KpiCard
             label="SITE VISITS"
-            value={`${dashboardData?.site_visits_count || 0} Visits`}
+            value={`${siteVisits} Visits`}
             sub="Scheduled Tours"
             icon={<MapPin size={18} color={colors.warning} />}
             accent={colors.warning}
@@ -289,7 +284,7 @@ export const SalesExecutiveDashboardScreen = () => {
           />
           <KpiCard
             label="CONVERTED BOOKINGS"
-            value={`${dashboardData?.converted_bookings || 0} Booked`}
+            value={`${convertedBookings} Booked`}
             sub="Closed Deals"
             icon={<Trophy size={18} color={colors.success} />}
             accent={colors.success}
@@ -333,7 +328,7 @@ export const SalesExecutiveDashboardScreen = () => {
                   phone={lead.phone}
                   property={lead.project?.name || 'Any'}
                   status={lead.status}
-                  onView={() => {}}
+                  onView={() => navigation.navigate('SalesExecutiveLeadDetails', {leadId: lead.id})}
                 />
                 {idx < assignedLeads.length - 1 && <View style={styles.rowDivider} />}
               </View>
@@ -347,7 +342,7 @@ export const SalesExecutiveDashboardScreen = () => {
         </View>
 
         {/* ── Quick Actions ─────────────────────────────────────────── */}
-        <View style={styles.quickActionsGrid}>
+        {/* <View style={styles.quickActionsGrid}>
           {[
             {icon: <MapPin size={20} color={colors.warning} />,    bg: colors.warningLight,  label: 'Site Visits',  sub: 'Manage tours'},
             {icon: <ClipboardList size={20} color={colors.accent} />, bg: colors.purpleLight, label: 'Tasks',        sub: 'Pending tasks'},
@@ -360,7 +355,7 @@ export const SalesExecutiveDashboardScreen = () => {
               <Text style={styles.quickActionSub}>{item.sub}</Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </View> */}
 
         <View style={{height: spacing.xl}} />
       </ScrollView>
@@ -387,7 +382,7 @@ const styles = StyleSheet.create({
   headerLeft: {flexDirection: 'row', alignItems: 'center', flex: 1},
   headerAvatar: {
     width: 42, height: 42, borderRadius: 21,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.primary,
     justifyContent: 'center', alignItems: 'center', marginRight: 12,
   },
   headerAvatarText: {color: colors.surface, fontSize: 18, fontWeight: '700'},
@@ -412,7 +407,7 @@ const styles = StyleSheet.create({
   // Hero Banner
   heroBanner: {
     marginHorizontal: 16, marginTop: 16,
-    backgroundColor: colors.accent,   // Indigo/purple for SE (distinct from Manager navy & Broker navy)
+    backgroundColor: colors.primary,   // Indigo/purple for SE (distinct from Manager navy & Broker navy)
     borderRadius: 20, padding: 22,
     overflow: 'hidden', position: 'relative',
   },
@@ -453,7 +448,7 @@ const styles = StyleSheet.create({
     borderRadius: 20, backgroundColor: colors.surface,
     borderWidth: 1, borderColor: colors.border,
   },
-  filterChipActive: {backgroundColor: colors.accent, borderColor: colors.accent},
+  filterChipActive: {backgroundColor: colors.primaryLight, borderColor: colors.accent},
   filterText: {fontSize: 12, color: colors.textSecondary, fontWeight: '600'},
   filterTextActive: {color: colors.surface},
 
