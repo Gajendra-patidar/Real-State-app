@@ -432,6 +432,119 @@ export const RecordBookingScreen = () => {
   const [dateModalVisible, setDateModalVisible] = React.useState(false);
   const [bookingDate, setBookingDate] = React.useState('');
 
+  const [projects, setProjects] = React.useState<any[]>([]);
+  const [selectedProject, setSelectedProject] = React.useState<any>(null);
+  const [isProjectModalVisible, setIsProjectModalVisible] = React.useState(false);
+
+  const [units, setUnits] = React.useState<any[]>([]);
+  const [selectedUnit, setSelectedUnit] = React.useState<any>(null);
+  const [isUnitModalVisible, setIsUnitModalVisible] = React.useState(false);
+  const [isLoadingUnits, setIsLoadingUnits] = React.useState(false);
+
+  const [tokenAmount, setTokenAmount] = React.useState('');
+  const [totalUnitCost, setTotalUnitCost] = React.useState('');
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  const handleConfirmBooking = async () => {
+    if (!lead?.id && !lead?.lead_id) {
+      Alert.alert('Error', 'No lead specified');
+      return;
+    }
+    if (!selectedProject) {
+      Alert.alert('Error', 'Please select a project');
+      return;
+    }
+    if (!selectedUnit) {
+      Alert.alert('Error', 'Please select an available unit');
+      return;
+    }
+    if (!tokenAmount) {
+      Alert.alert('Error', 'Please enter Token Amount');
+      return;
+    }
+    if (!bookingDate) {
+      Alert.alert('Error', 'Please select a Booking Date');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const leadId = lead.id || lead.lead_id;
+      
+      const payload = {
+        project_id: selectedProject.id,
+        unit_id: selectedUnit.id,
+        lead_id: leadId,
+        customer_name: lead.first_name || lead.name || 'Customer',
+        customer_phone: lead.phone || '',
+        customer_email: lead.email || '',
+        booking_amount: Number(tokenAmount),
+        total_unit_cost: totalUnitCost ? Number(totalUnitCost) : undefined,
+        booking_date: bookingDate, // Make sure it's in correct format e.g. YYYY-MM-DD
+      };
+
+      await salesExecutiveApi.recordBooking(payload);
+      Alert.alert('Success', 'Booking request submitted and unit locked successfully.');
+      navigation.goBack();
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.message || 'Failed to submit booking');
+      console.log('Error submitting booking', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const formatUnitDisplay = (unit: any) => {
+    if (!unit) return '';
+    let text = '';
+    if (unit.building?.name) {
+      text += `${unit.building.name} - `;
+    } else if (unit.building_name) {
+      text += `${unit.building_name} - `;
+    }
+    text += unit.unit_number || unit.name || `Unit ${unit.id}`;
+    if (unit.unit_type) {
+      text += ` (${unit.unit_type})`;
+    }
+    return text;
+  };
+
+  React.useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const response = await salesExecutiveApi.getProjects();
+        if (response && response.data) {
+          setProjects(response.data || []);
+        } else if (Array.isArray(response)) {
+          setProjects(response);
+        }
+      } catch (error) {
+        console.log('Error fetching projects', error);
+      }
+    };
+    fetchProjects();
+  }, []);
+
+  React.useEffect(() => {
+    if (selectedProject?.id) {
+      const fetchUnits = async () => {
+        try {
+          setIsLoadingUnits(true);
+          setUnits([]);
+          setSelectedUnit(null);
+          const response = await salesExecutiveApi.getProjectUnits(selectedProject.id, { status: 'available' });
+          const fetchedUnits = response?.units || response?.data?.units || response?.data || response || [];
+          setUnits(Array.isArray(fetchedUnits) ? fetchedUnits : []);
+        } catch (error) {
+          console.log('Error fetching units', error);
+        } finally {
+          setIsLoadingUnits(false);
+        }
+      };
+      fetchUnits();
+    }
+  }, [selectedProject]);
+
   return (
     <View style={styles.container}>
       <AppHeader leftIcon="arrow-left" onLeftPress={() => navigation.goBack()} title="Record Booking" />
@@ -441,22 +554,53 @@ export const RecordBookingScreen = () => {
         <SectionTitle title="Property Details" />
         <View style={styles.formGroupSingle}>
           <Text style={styles.inputLabel}>Project <Text style={styles.required}>*</Text></Text>
-          <TouchableOpacity style={styles.pickerBox}><Text style={styles.pickerText}>Apex Grand Residency</Text><Icon name="chevron-down" size={20} color={colors.textSecondary} /></TouchableOpacity>
+          <TouchableOpacity style={styles.pickerBox} onPress={() => setIsProjectModalVisible(true)}>
+            <Text style={selectedProject ? styles.pickerText : { color: colors.textSecondary }}>
+              {selectedProject ? selectedProject.name : 'Select Project'}
+            </Text>
+            <Icon name="chevron-down" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
         </View>
         <View style={styles.formGroupSingle}>
           <Text style={styles.inputLabel}>Available Unit <Text style={styles.required}>*</Text></Text>
-          <TouchableOpacity style={styles.pickerBox}><Text style={styles.pickerText}>Select a Unit...</Text><Icon name="chevron-down" size={20} color={colors.textSecondary} /></TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.pickerBox, !selectedProject && { opacity: 0.5 }]} 
+            onPress={() => {
+              if (!selectedProject) {
+                Alert.alert('Notice', 'Please select a project first to see available units.');
+                return;
+              }
+              setIsUnitModalVisible(true);
+            }}
+          >
+            <Text style={selectedUnit ? styles.pickerText : { color: colors.textSecondary }}>
+              {isLoadingUnits ? 'Loading...' : (selectedUnit ? formatUnitDisplay(selectedUnit) : 'Select a Unit...')}
+            </Text>
+            <Icon name="chevron-down" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
           <Text style={styles.helperText}>Units filter automatically by project selection.</Text>
         </View>
 
         <SectionTitle title="Financials" />
         <View style={styles.formGroupSingle}>
           <Text style={styles.inputLabel}>Token Amount (₹) <Text style={styles.required}>*</Text></Text>
-          <TextInput style={styles.textInput} placeholder="e.g. 100000" keyboardType="numeric" />
+          <TextInput 
+            style={styles.textInput} 
+            placeholder="e.g. 100000" 
+            keyboardType="numeric" 
+            value={tokenAmount}
+            onChangeText={setTokenAmount}
+          />
         </View>
         <View style={styles.formGroupSingle}>
           <Text style={styles.inputLabel}>Total Unit Cost (₹)</Text>
-          <TextInput style={styles.textInput} placeholder="e.g. 7500000" keyboardType="numeric" />
+          <TextInput 
+            style={styles.textInput} 
+            placeholder="e.g. 7500000" 
+            keyboardType="numeric" 
+            value={totalUnitCost}
+            onChangeText={setTotalUnitCost}
+          />
         </View>
         <View style={styles.formGroupSingle}>
           <Text style={styles.inputLabel}>Booking Date <Text style={styles.required}>*</Text></Text>
@@ -476,8 +620,16 @@ export const RecordBookingScreen = () => {
         <ActivityLogItem />
 
         <View style={styles.footerRow}>
-          <TouchableOpacity style={styles.btnCancel} onPress={() => navigation.goBack()}><Text style={styles.btnCancelText}>Cancel</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.btnPrimary} onPress={() => { Alert.alert('Success', 'Booking Recorded'); navigation.goBack(); }}><Text style={styles.btnPrimaryText}>Confirm Booking</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.btnCancel} onPress={() => navigation.goBack()}>
+            <Text style={styles.btnCancelText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.btnPrimary, isSubmitting && { opacity: 0.7 }]} 
+            onPress={handleConfirmBooking}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.btnPrimaryText}>{isSubmitting ? 'Submitting...' : 'Confirm Booking'}</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -486,6 +638,92 @@ export const RecordBookingScreen = () => {
         onClose={() => setDateModalVisible(false)}
         onSelectDate={setBookingDate}
       />
+
+      {/* Project Selection Modal */}
+      <Modal
+        visible={isProjectModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsProjectModalVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsProjectModalVisible(false)}>
+          <View style={[styles.modalContent, { maxHeight: '60%', paddingBottom: 24 }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Project</Text>
+              <TouchableOpacity onPress={() => setIsProjectModalVisible(false)}>
+                <Icon name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {projects.map((proj, idx) => (
+                <TouchableOpacity
+                  key={proj.id || idx}
+                  style={styles.actionMenuItem}
+                  onPress={() => {
+                    setSelectedProject(proj);
+                    setIsProjectModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.actionMenuText}>{proj.name || `Project ${idx + 1}`}</Text>
+                  {selectedProject?.id === proj.id && <Icon name="check" size={20} color={colors.primary} style={{ marginLeft: 'auto' }} />}
+                </TouchableOpacity>
+              ))}
+              {projects.length === 0 && (
+                <Text style={{ textAlign: 'center', padding: 16, color: colors.textSecondary }}>
+                  No projects found.
+                </Text>
+              )}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Unit Selection Modal */}
+      <Modal
+        visible={isUnitModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsUnitModalVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsUnitModalVisible(false)}>
+          <View style={[styles.modalContent, { maxHeight: '60%', paddingBottom: 24 }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Unit</Text>
+              <TouchableOpacity onPress={() => setIsUnitModalVisible(false)}>
+                <Icon name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {units.map((unit, idx) => (
+                <TouchableOpacity
+                  key={unit.id || idx}
+                  style={styles.actionMenuItem}
+                  onPress={() => {
+                    setSelectedUnit(unit);
+                    setIsUnitModalVisible(false);
+                  }}
+                >
+                  <View>
+                    <Text style={styles.actionMenuText}>
+                      {formatUnitDisplay(unit)}
+                    </Text>
+                    {unit.base_price && (
+                      <Text style={{ fontSize: typography.sizes.xs, color: colors.textSecondary }}>₹{unit.base_price}</Text>
+                    )}
+                  </View>
+                  {selectedUnit?.id === unit.id && <Icon name="check" size={20} color={colors.primary} style={{ marginLeft: 'auto' }} />}
+                </TouchableOpacity>
+              ))}
+              {units.length === 0 && !isLoadingUnits && (
+                <Text style={{ textAlign: 'center', padding: 16, color: colors.textSecondary }}>
+                  No available units found for this project.
+                </Text>
+              )}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </View>
   );
 };

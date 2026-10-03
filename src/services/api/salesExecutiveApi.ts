@@ -126,7 +126,7 @@ export const salesExecutiveApi = {
   },
 
   getAllNegotiations: async () => {
-    const response = await api.get('/executive/leads/negotiation');
+    const response = await api.get('/executive/negotiations');
     return response.data;
   },
 
@@ -165,6 +165,11 @@ export const salesExecutiveApi = {
 
   getProjectUnits: async (id: number, params?: { status?: string }) => {
     const response = await api.get(`/executive/projects/${id}/units`, { params });
+    return response.data;
+  },
+
+  recordBooking: async (payload: any) => {
+    const response = await api.post(`/executive/bookings`, payload);
     return response.data;
   },
 

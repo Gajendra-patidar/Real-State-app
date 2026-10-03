@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -61,6 +61,7 @@ export const SalesExecutiveNegotiationsScreen = () => {
                   const leadData = leadRes.data || leadRes; // fallback depending on response format
                   return {
                     ...neg,
+                    lead: leadData,
                     leadName: leadData.first_name || leadData.name || 'Unknown',
                     project: leadData.project?.name || leadData.project_name || 'Unknown Project',
                   };
@@ -94,9 +95,18 @@ export const SalesExecutiveNegotiationsScreen = () => {
     const offeredPrice = item.offered_price || item.offeredPrice || '0';
 
     return (
-      <View style={styles.card}>
+      <TouchableOpacity 
+        style={styles.card} 
+        activeOpacity={0.7}
+        onPress={() => {
+          const targetLeadId = item.lead_id || item.lead?.id;
+          if (targetLeadId) {
+            navigation.navigate('SalesExecutiveLeadDetails', { leadId: targetLeadId });
+          }
+        }}
+      >
         <View style={styles.cardHeader}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.cardTitle}>{leadName}</Text>
             <Text style={styles.cardSubtitle}>{projectName}</Text>
           </View>
@@ -104,6 +114,7 @@ export const SalesExecutiveNegotiationsScreen = () => {
             <Text style={styles.statusText}>{status.replace('_', ' ').toUpperCase()}</Text>
           </View>
         </View>
+        
         <View style={styles.cardBody}>
           <View style={styles.detailRow}>
             <Icon name="calendar" size={16} color={colors.textSecondary} />
@@ -118,7 +129,20 @@ export const SalesExecutiveNegotiationsScreen = () => {
             <Text style={styles.detailText}>Offered: ₹{offeredPrice}</Text>
           </View>
         </View>
-      </View>
+
+        <View style={{ marginTop: spacing.m, paddingTop: spacing.m, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'flex-end' }}>
+          <TouchableOpacity 
+            style={{ backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, flexDirection: 'row', alignItems: 'center' }}
+            onPress={(e) => {
+              e.stopPropagation();
+              navigation.navigate('RecordBooking', { lead: item.lead || { id: item.lead_id, first_name: item.leadName } });
+            }}
+          >
+            <Icon name="file-document-edit-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
+            <Text style={{ fontSize: typography.sizes.s, fontWeight: 'bold', color: '#FFF' }}>Record Booking</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
     );
   };
 
@@ -224,7 +248,7 @@ export const SalesExecutiveNegotiationsScreen = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F3F4F6' },
-  content: { flex: 1 },
+  content: { flex: 1, paddingBottom: 80 }, // Extra padding for FAB
   fab: {
     position: 'absolute',
     bottom: '10%',
