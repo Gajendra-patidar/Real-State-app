@@ -37,15 +37,20 @@ export const SalesExecutiveLeadsScreen = () => {
   const [isHistoryModalVisible, setIsHistoryModalVisible] = useState(false);
   const [selectedLeadForHistory, setSelectedLeadForHistory] = useState<any>(null);
 
+  const INQUIRY_STATUSES = ['Meeting at client place', 'Not interested', 'In Followup', 'Not connected'];
+  const BUDGET_OPTIONS = ['15 lac', '30 lac', '50 lac', '1 cr'];
+
   const [isCallLogModalVisible, setIsCallLogModalVisible] = useState(false);
   const [selectedLeadForCallLog, setSelectedLeadForCallLog] = useState<any>(null);
   const [callLogForm, setCallLogForm] = useState({
-    status: 'IN FOLLOWUP',
+    status: 'In Followup',
     nextFollowUpDate: '',
     budget: '',
     remarks: ''
   });
   const [isCallLogDatePickerVisible, setIsCallLogDatePickerVisible] = useState(false);
+  const [isCallLogStatusModalVisible, setIsCallLogStatusModalVisible] = useState(false);
+  const [isCallLogBudgetModalVisible, setIsCallLogBudgetModalVisible] = useState(false);
 
   const [isAddLeadModalVisible, setIsAddLeadModalVisible] = useState(false);
 
@@ -121,6 +126,42 @@ export const SalesExecutiveLeadsScreen = () => {
     } finally {
       setIsStatusModalVisible(false);
       setSelectedLeadForStatus(null);
+    }
+  };
+
+  const handleSaveCallLog = async () => {
+    if (!selectedLeadForCallLog) return;
+    if (!callLogForm.nextFollowUpDate) {
+      Alert.alert('Validation Error', 'Please select Next Followup Date');
+      return;
+    }
+
+    try {
+      let finalNotes = callLogForm.remarks || '';
+      if (callLogForm.budget) {
+        finalNotes = `Budget: ${callLogForm.budget}\n${finalNotes}`.trim();
+      }
+
+      await salesExecutiveApi.scheduleFollowUp(selectedLeadForCallLog.id, {
+        scheduled_at: callLogForm.nextFollowUpDate,
+        type: callLogForm.status,
+        notes: finalNotes
+      });
+
+      Alert.alert('Success', 'Call log saved successfully');
+      setIsCallLogModalVisible(false);
+      
+      // Optionally reset form
+      setCallLogForm({
+        status: 'In Followup',
+        nextFollowUpDate: '',
+        budget: '',
+        remarks: ''
+      });
+      setSelectedLeadForCallLog(null);
+    } catch (error) {
+      console.log('Error saving call log', error);
+      Alert.alert('Error', 'Failed to save call log.');
     }
   };
 
@@ -443,6 +484,8 @@ export const SalesExecutiveLeadsScreen = () => {
     return true;
   });
 
+  console.log('Filtered Leads:', filteredLeads);
+
   return (
     <View style={styles.container}>
       {/* <AppHeader title="Team Leads Pipeline" /> */}
@@ -530,10 +573,10 @@ export const SalesExecutiveLeadsScreen = () => {
               
               <View style={{ marginBottom: spacing.m }}>
                 <Text style={styles.inputLabel}>Inquiry Status <Text style={{color: '#EF4444'}}>*</Text></Text>
-                <View style={styles.inputBoxSelect}>
+                <TouchableOpacity style={styles.inputBoxSelect} onPress={() => setIsCallLogStatusModalVisible(true)}>
                   <Text style={styles.inputText}>{callLogForm.status}</Text>
                   <Icon name="chevron-down" size={20} color={colors.textSecondary} />
-                </View>
+                </TouchableOpacity>
               </View>
 
               <View style={{ marginBottom: spacing.m }}>
@@ -548,10 +591,12 @@ export const SalesExecutiveLeadsScreen = () => {
 
               <View style={{ marginBottom: spacing.m }}>
                 <Text style={styles.inputLabel}>Budget Upto</Text>
-                <View style={styles.inputBoxSelect}>
-                  <Text style={[styles.inputText, { color: colors.textMuted }]}>Select Budget</Text>
+                <TouchableOpacity style={styles.inputBoxSelect} onPress={() => setIsCallLogBudgetModalVisible(true)}>
+                  <Text style={[styles.inputText, !callLogForm.budget && { color: colors.textMuted }]}>
+                    {callLogForm.budget || 'Select Budget'}
+                  </Text>
                   <Icon name="chevron-down" size={20} color={colors.textSecondary} />
-                </View>
+                </TouchableOpacity>
               </View>
 
               <View style={{ marginBottom: spacing.l }}>
@@ -571,10 +616,7 @@ export const SalesExecutiveLeadsScreen = () => {
                 <TouchableOpacity style={styles.addLeadCancelBtn} onPress={() => setIsCallLogModalVisible(false)}>
                   <Text style={styles.addLeadCancelText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.addLeadSaveBtn} onPress={() => {
-                  Alert.alert('Success', 'Call log saved successfully');
-                  setIsCallLogModalVisible(false);
-                }}>
+                <TouchableOpacity style={styles.addLeadSaveBtn} onPress={handleSaveCallLog}>
                   <Text style={styles.addLeadSaveText}>Save Log</Text>
                 </TouchableOpacity>
               </View>
@@ -590,6 +632,74 @@ export const SalesExecutiveLeadsScreen = () => {
             setIsCallLogDatePickerVisible(false);
           }}
         />
+        
+        {/* Status Selection Modal */}
+        <Modal
+          visible={isCallLogStatusModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsCallLogStatusModalVisible(false)}
+        >
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsCallLogStatusModalVisible(false)}>
+            <View style={[styles.modalContent, { maxHeight: '60%' }]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Inquiry Status</Text>
+                <TouchableOpacity onPress={() => setIsCallLogStatusModalVisible(false)}>
+                  <Icon name="close" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView>
+                {INQUIRY_STATUSES.map(status => (
+                  <TouchableOpacity 
+                    key={status}
+                    style={styles.modalItem}
+                    onPress={() => {
+                      setCallLogForm(prev => ({ ...prev, status }));
+                      setIsCallLogStatusModalVisible(false);
+                    }}
+                  >
+                    <Text style={styles.modalItemText}>{status}</Text>
+                    {callLogForm.status === status && <Icon name="check" size={20} color={colors.primary} />}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* Budget Selection Modal */}
+        <Modal
+          visible={isCallLogBudgetModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsCallLogBudgetModalVisible(false)}
+        >
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsCallLogBudgetModalVisible(false)}>
+            <View style={[styles.modalContent, { maxHeight: '60%' }]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Budget</Text>
+                <TouchableOpacity onPress={() => setIsCallLogBudgetModalVisible(false)}>
+                  <Icon name="close" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView>
+                {BUDGET_OPTIONS.map(budget => (
+                  <TouchableOpacity 
+                    key={budget}
+                    style={styles.modalItem}
+                    onPress={() => {
+                      setCallLogForm(prev => ({ ...prev, budget }));
+                      setIsCallLogBudgetModalVisible(false);
+                    }}
+                  >
+                    <Text style={styles.modalItemText}>{budget}</Text>
+                    {callLogForm.budget === budget && <Icon name="check" size={20} color={colors.primary} />}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </Modal>
 
 
@@ -889,6 +999,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: typography.sizes.m,
     color: colors.text,
+    paddingHorizontal: spacing.m,
   },
   modalItemTextActive: {
     fontWeight: typography.weights.bold,
@@ -971,8 +1082,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
   addLeadModalTitle: { fontSize: 20, fontWeight: 'bold', color: '#FFF' },
   addLeadModalSubtitle: { fontSize: typography.sizes.s, color: '#E0F2FE', marginTop: 4 },

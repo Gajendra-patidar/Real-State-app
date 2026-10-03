@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, ActivityIndicator, Alert, Linking } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -28,6 +28,7 @@ export const SalesExecutiveFollowUpsScreen = () => {
     try {
       setIsLoading(true);
       const response = await salesExecutiveApi.getFollowUps();
+      console.log('Fetched follow-ups:', response);
       
       
       let list = [];
@@ -47,23 +48,91 @@ export const SalesExecutiveFollowUpsScreen = () => {
     }
   };
 
+  const INQUIRY_STATUSES = ['Meeting at client place', 'Not interested', 'In Followup', 'Not connected'];
+  const BUDGET_OPTIONS = ['15 lac', '30 lac', '50 lac', '1 cr'];
+
   const [isActionModalVisible, setIsActionModalVisible] = useState(false);
   const [selectedLead, setSelectedLead] = useState<any>(null);
 
   const [isCallLogModalVisible, setIsCallLogModalVisible] = useState(false);
   const [selectedLeadForCallLog, setSelectedLeadForCallLog] = useState<any>(null);
   const [callLogForm, setCallLogForm] = useState({
-    status: 'IN FOLLOWUP',
+    status: 'In Followup',
     nextFollowUpDate: '',
     budget: '',
     remarks: ''
   });
   const [isCallLogDatePickerVisible, setIsCallLogDatePickerVisible] = useState(false);
+  const [isCallLogStatusModalVisible, setIsCallLogStatusModalVisible] = useState(false);
+  const [isCallLogBudgetModalVisible, setIsCallLogBudgetModalVisible] = useState(false);
+
+  const [leadLogs, setLeadLogs] = useState<any[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
+  useEffect(() => {
+    if (selectedLeadForCallLog && isCallLogModalVisible) {
+      const fetchLogs = async () => {
+        try {
+          setIsLoadingLogs(true);
+          const leadId = selectedLeadForCallLog.lead?.id || selectedLeadForCallLog.lead_id || selectedLeadForCallLog.id;
+          const res = await salesExecutiveApi.getLeadDetails(leadId);
+          // Assuming the details return activities or call logs
+          const activities = res.data?.calls || res.calls || [];
+          console.log('Fetched lead logs:', activities);
+          setLeadLogs(activities);
+        } catch (err) {
+          console.log('Error fetching lead logs', err);
+        } finally {
+          setIsLoadingLogs(false);
+        }
+      };
+      fetchLogs();
+    }
+  }, [selectedLeadForCallLog, isCallLogModalVisible]);
+
+  const handleSaveCallLog = async () => {
+    if (!selectedLeadForCallLog) return;
+    if (!callLogForm.nextFollowUpDate) {
+      Alert.alert('Validation Error', 'Please select Next Followup Date');
+      return;
+    }
+
+    try {
+      let finalNotes = callLogForm.remarks || '';
+      if (callLogForm.budget) {
+        finalNotes = `Budget: ${callLogForm.budget}\n${finalNotes}`.trim();
+      }
+
+      const leadId = selectedLeadForCallLog.lead?.id || selectedLeadForCallLog.lead_id || selectedLeadForCallLog.id;
+
+      await salesExecutiveApi.scheduleFollowUp(leadId, {
+        scheduled_at: callLogForm.nextFollowUpDate,
+        type: callLogForm.status,
+        notes: finalNotes
+      });
+
+      Alert.alert('Success', 'Call log saved successfully');
+      setIsCallLogModalVisible(false);
+      
+      setCallLogForm({
+        status: 'In Followup',
+        nextFollowUpDate: '',
+        budget: '',
+        remarks: ''
+      });
+      setSelectedLeadForCallLog(null);
+    } catch (error) {
+      console.log('Error saving call log', error);
+      Alert.alert('Error', 'Failed to save call log.');
+    }
+  };
 
   const handleActionPress = (item: any) => {
     setSelectedLead(item);
     setIsActionModalVisible(true);
   };
+
+  console.log('Follow-ups data:', selectedLeadForCallLog);
 
   const renderStatCard = (title: string, count: string, label: string, icon: string, color: string, bgColor: string) => (
     <View style={styles.statCard}>
@@ -80,7 +149,7 @@ export const SalesExecutiveFollowUpsScreen = () => {
   );
 
   const renderFollowUpCard = ({ item }: { item: any }) => {
-    const name = item.name || item.lead?.name || item.lead_name || 'Unknown';
+    const name = item.lead?.first_name + ' ' + item.lead?.last_name || 'Unknown';
     const phone = item.phone || item.lead?.phone || item.lead_phone || 'N/A';
     const initials = item.initials || name.substring(0, 2).toUpperCase();
     const stage = item.stage || item.status || 'NEW';
@@ -132,7 +201,19 @@ export const SalesExecutiveFollowUpsScreen = () => {
             <Icon name="lightning-bolt" size={18} color="#B45309" />
             <Text style={styles.btnActionText}>Action</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.btnWhatsapp}>
+          <TouchableOpacity 
+            style={styles.btnWhatsapp} 
+            onPress={() => {
+              if (phone && phone !== 'N/A') {
+                const phoneNumber = phone.replace(/[^0-9+]/g, '');
+                Linking.openURL(`whatsapp://send?phone=${phoneNumber}`).catch(() => {
+                  Alert.alert('Error', 'Make sure WhatsApp is installed on your device');
+                });
+              } else {
+                Alert.alert('Error', 'No valid phone number found for this lead.');
+              }
+            }}
+          >
             <Icon name="whatsapp" size={20} color="#FFF" />
           </TouchableOpacity>
         </View>
@@ -147,6 +228,7 @@ export const SalesExecutiveFollowUpsScreen = () => {
     return itemName.toLowerCase().includes(searchQuery.toLowerCase()) ||
            itemPhone.includes(searchQuery);
   }) : [];
+
 
   return (
     <View style={styles.container}>
@@ -253,17 +335,17 @@ export const SalesExecutiveFollowUpsScreen = () => {
 
             <ScrollView style={styles.callLogBody} contentContainerStyle={{ paddingBottom: spacing.xxl }}>
               <View style={styles.customerInfoCard}>
-                <Text style={styles.customerInfoTitle}>{selectedLeadForCallLog?.name}</Text>
-                <Text style={styles.customerInfoSubtitle}>Phone: {selectedLeadForCallLog?.phone}</Text>
+                <Text style={styles.customerInfoTitle}>{selectedLeadForCallLog?.lead?.first_name} {selectedLeadForCallLog?.lead?.last_name}</Text>
+                <Text style={styles.customerInfoSubtitle}>Phone: {selectedLeadForCallLog?.lead?.phone}</Text>
               </View>
 
               <View style={styles.callLogFormRow}>
                 <View style={styles.callLogInputGroup}>
                   <Text style={styles.callLogLabel}>Inquiry Status <Text style={styles.textRed}>*</Text></Text>
-                  <View style={styles.callLogSelect}>
+                  <TouchableOpacity style={styles.callLogSelect} onPress={() => setIsCallLogStatusModalVisible(true)}>
                     <Text style={styles.callLogSelectText}>{callLogForm.status}</Text>
                     <Icon name="chevron-down" size={20} color={colors.textSecondary} />
-                  </View>
+                  </TouchableOpacity>
                 </View>
                 
                 <View style={styles.callLogInputGroup}>
@@ -278,10 +360,12 @@ export const SalesExecutiveFollowUpsScreen = () => {
 
                 <View style={styles.callLogInputGroup}>
                   <Text style={styles.callLogLabel}>Budget Upto</Text>
-                  <View style={styles.callLogSelect}>
-                    <Text style={[styles.callLogSelectText, { color: colors.textSecondary }]}>Select Budget Upto</Text>
+                  <TouchableOpacity style={styles.callLogSelect} onPress={() => setIsCallLogBudgetModalVisible(true)}>
+                    <Text style={[styles.callLogSelectText, !callLogForm.budget && { color: colors.textSecondary }]}>
+                      {callLogForm.budget || 'Select Budget Upto'}
+                    </Text>
                     <Icon name="chevron-down" size={20} color={colors.textSecondary} />
-                  </View>
+                  </TouchableOpacity>
                 </View>
               </View>
 
@@ -299,16 +383,30 @@ export const SalesExecutiveFollowUpsScreen = () => {
                 </View>
               </View>
 
-              <TouchableOpacity style={styles.callLogSaveBtn} onPress={() => setIsCallLogModalVisible(false)}>
+              <TouchableOpacity style={styles.callLogSaveBtn} onPress={handleSaveCallLog}>
                 <Text style={styles.callLogSaveBtnText}>Save Call Log</Text>
               </TouchableOpacity>
 
               <View style={styles.recentLogsSection}>
                 <Text style={styles.recentLogsTitle}>Recent Call Logs</Text>
-                <View style={styles.emptyLogsCard}>
-                  <Icon name="history" size={24} color={colors.textMuted} style={{ marginBottom: 8 }} />
-                  <Text style={styles.callLogTableEmpty}>No previous call logs recorded for this lead.</Text>
-                </View>
+                {isLoadingLogs ? (
+                  <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: spacing.m }} />
+                ) : leadLogs && leadLogs.length > 0 ? (
+                  leadLogs.map((log: any, index: number) => (
+                    <View key={log.id || index} style={{ padding: spacing.m, backgroundColor: '#F8FAFC', borderRadius: 8, marginBottom: spacing.s, borderWidth: 1, borderColor: colors.border }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <Text style={{ fontWeight: 'bold', color: colors.text, fontSize: 13 }}>{log.call_type || log.type || 'Follow Up'}</Text>
+                        <Text style={{ fontSize: 11, color: colors.textSecondary }}>{log.created_at || log.date || ''}</Text>
+                      </View>
+                      <Text style={{ fontSize: 13, color: colors.textSecondary }}>{log.notes || log.remarks || 'No notes provided'}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.emptyLogsCard}>
+                    <Icon name="history" size={24} color={colors.textMuted} style={{ marginBottom: 8 }} />
+                    <Text style={styles.callLogTableEmpty}>No previous call logs recorded for this lead.</Text>
+                  </View>
+                )}
               </View>
             </ScrollView>
           </TouchableOpacity>
@@ -323,6 +421,74 @@ export const SalesExecutiveFollowUpsScreen = () => {
           setIsCallLogDatePickerVisible(false);
         }}
       />
+      
+      {/* Status Selection Modal */}
+      <Modal
+        visible={isCallLogStatusModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsCallLogStatusModalVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsCallLogStatusModalVisible(false)}>
+          <View style={[styles.modalContent, { maxHeight: '60%', paddingBottom: spacing.l }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Inquiry Status</Text>
+              <TouchableOpacity onPress={() => setIsCallLogStatusModalVisible(false)}>
+                <Icon name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {INQUIRY_STATUSES.map(status => (
+                <TouchableOpacity 
+                  key={status}
+                  style={styles.actionMenuItem}
+                  onPress={() => {
+                    setCallLogForm(prev => ({ ...prev, status }));
+                    setIsCallLogStatusModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.actionMenuText}>{status}</Text>
+                  {callLogForm.status === status && <Icon name="check" size={20} color={colors.primary} style={{ marginLeft: 'auto' }} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Budget Selection Modal */}
+      <Modal
+        visible={isCallLogBudgetModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsCallLogBudgetModalVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsCallLogBudgetModalVisible(false)}>
+          <View style={[styles.modalContent, { maxHeight: '60%', paddingBottom: spacing.l }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Budget</Text>
+              <TouchableOpacity onPress={() => setIsCallLogBudgetModalVisible(false)}>
+                <Icon name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {BUDGET_OPTIONS.map(budget => (
+                <TouchableOpacity 
+                  key={budget}
+                  style={styles.actionMenuItem}
+                  onPress={() => {
+                    setCallLogForm(prev => ({ ...prev, budget }));
+                    setIsCallLogBudgetModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.actionMenuText}>{budget}</Text>
+                  {callLogForm.budget === budget && <Icon name="check" size={20} color={colors.primary} style={{ marginLeft: 'auto' }} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
     </View>
   );

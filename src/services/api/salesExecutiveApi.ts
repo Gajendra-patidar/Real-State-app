@@ -87,6 +87,7 @@ export const salesExecutiveApi = {
   },
 
   scheduleFollowUp: async (leadId: number, payload: { scheduled_at: string; type: string; notes?: string }) => {
+    console.log('Scheduling follow-up', { leadId, payload });
     const response = await api.post(`/executive/leads/${leadId}/follow-ups`, payload);
     return response.data;
   },
@@ -109,13 +110,30 @@ export const salesExecutiveApi = {
     return response.data;
   },
 
-  scheduleSiteVisit: async (payload: { lead_id: number; project_id: number; scheduled_at: string; notes?: string }) => {
+  scheduleSiteVisit: async (payload: { lead_id: number; project_id: number; scheduled_at: string; pickup_location?: string; notes?: string }) => {
     const response = await api.post('/executive/site-visits', payload);
+    console.log('Scheduling site visit response:', { payload, response });
+    return response.data;
+  },
+  startNegotiation: async (id: number, payload: { offered_price: number; discount_requested: number; notes?: string }) => {
+    const response = await api.post(`/executive/leads/${id}/negotiation`, payload);
     return response.data;
   },
 
-  updateSiteVisitStatus: async (id: number, payload: { status: string }) => {
-    const response = await api.post(`/executive/site-visits/${id}/status`, payload);
+  getNegotiations: async (id: number) => {
+    const response = await api.get(`/executive/leads/${id}/negotiations`);
+    return response.data;
+  },
+
+  getAllNegotiations: async () => {
+    const response = await api.get('/executive/leads/negotiation');
+    return response.data;
+  },
+
+  updateSiteVisitStatus: async (id: number, payload: any) => {
+    const response = await api.post(`/executive/site-visits/${id}/status`, payload, {
+      headers: payload instanceof FormData ? { 'Content-Type': 'multipart/form-data' } : undefined,
+    });
     return response.data;
   },
 

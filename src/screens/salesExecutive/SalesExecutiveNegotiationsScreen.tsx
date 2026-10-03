@@ -1,46 +1,126 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppHeader } from '../../components/common/AppHeader';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
+import { salesExecutiveApi } from '../../services/api/salesExecutiveApi';
 
 export const SalesExecutiveNegotiationsScreen = () => {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const lead = route.params?.lead;
+
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [negotiations, setNegotiations] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const [assignedLeads, setAssignedLeads] = useState<any[]>([]);
+  const [selectedLeadForNegotiation, setSelectedLeadForNegotiation] = useState<any>(null);
 
-  const renderNegotiationCard = ({ item }: { item: any }) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View>
-          <Text style={styles.cardTitle}>{item.leadName}</Text>
-          <Text style={styles.cardSubtitle}>{item.project}</Text>
+  React.useEffect(() => {
+    if (isModalVisible) {
+      fetchAssignedLeads();
+    }
+  }, [isModalVisible]);
+
+  const fetchAssignedLeads = async () => {
+    try {
+      const res = await salesExecutiveApi.getAssignedLeads();
+      const leadsData = res.data?.data || res.data || [];
+      setAssignedLeads(leadsData);
+    } catch (e) {
+      console.error('Failed to fetch assigned leads for dropdown', e);
+    }
+  };
+
+  React.useEffect(() => {
+    const fetchNegotiations = async () => {
+      try {
+        setIsLoading(true);
+        const leadId = lead?.id || lead?.lead_id;
+        
+        // Use specific lead API if navigated with a lead, otherwise fetch all
+        const res = leadId 
+          ? await salesExecutiveApi.getNegotiations(leadId)
+          : await salesExecutiveApi.getAllNegotiations();
+          
+        if (res.status === 'success') {
+          const negotiationsData = Array.isArray(res.data) ? res.data : [res.data];
+          
+          // Fetch lead data for each negotiation
+          const enrichedNegotiations = await Promise.all(
+            negotiationsData.map(async (neg: any) => {
+              try {
+                if (neg.lead_id) {
+                  const leadRes = await salesExecutiveApi.getLeadDetails(neg.lead_id);
+                  const leadData = leadRes.data || leadRes; // fallback depending on response format
+                  return {
+                    ...neg,
+                    leadName: leadData.first_name || leadData.name || 'Unknown',
+                    project: leadData.project?.name || leadData.project_name || 'Unknown Project',
+                  };
+                }
+                return neg;
+              } catch (e) {
+                console.error('Failed to fetch lead details for negotiation', e);
+                return neg;
+              }
+            })
+          );
+          
+          setNegotiations(enrichedNegotiations);
+        }
+      } catch (error) {
+        console.error('Failed to fetch negotiations', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchNegotiations();
+  }, [lead]);
+
+  const renderNegotiationCard = ({ item }: { item: any }) => {
+    const leadName = item.lead?.first_name || item.leadName || 'Unknown Lead';
+    const projectName = item.lead?.project?.name || item.project || 'Unknown Project';
+    const status = item.status || 'negotiation';
+    const date = item.created_at ? new Date(item.created_at).toLocaleDateString() : item.date || 'N/A';
+    const executiveName = item.executive?.name || item.executive || 'Executive';
+    const offeredPrice = item.offered_price || item.offeredPrice || '0';
+
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View>
+            <Text style={styles.cardTitle}>{leadName}</Text>
+            <Text style={styles.cardSubtitle}>{projectName}</Text>
+          </View>
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusText}>{status.replace('_', ' ').toUpperCase()}</Text>
+          </View>
         </View>
-        <View style={styles.statusBadge}>
-          <Text style={styles.statusText}>{item.status.replace('_', ' ').toUpperCase()}</Text>
+        <View style={styles.cardBody}>
+          <View style={styles.detailRow}>
+            <Icon name="calendar" size={16} color={colors.textSecondary} />
+            <Text style={styles.detailText}>{date}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Icon name="account-tie" size={16} color={colors.textSecondary} />
+            <Text style={styles.detailText}>{executiveName}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Icon name="cash-multiple" size={16} color={colors.textSecondary} />
+            <Text style={styles.detailText}>Offered: ₹{offeredPrice}</Text>
+          </View>
         </View>
       </View>
-      <View style={styles.cardBody}>
-        <View style={styles.detailRow}>
-          <Icon name="calendar" size={16} color={colors.textSecondary} />
-          <Text style={styles.detailText}>{item.date}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Icon name="account-tie" size={16} color={colors.textSecondary} />
-          <Text style={styles.detailText}>{item.executive}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Icon name="cash-multiple" size={16} color={colors.textSecondary} />
-          <Text style={styles.detailText}>Offered: {item.offeredPrice}</Text>
-        </View>
-      </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={[styles.container]}>
@@ -89,15 +169,43 @@ export const SalesExecutiveNegotiationsScreen = () => {
 
             <View style={styles.modalBody}>
               <Text style={styles.inputLabel}>SELECT LEAD <Text style={{color: '#EF4444'}}>*</Text></Text>
-              <View style={styles.selectBox}>
-                <Text style={styles.selectBoxText}>-- Choose a Lead --</Text>
-                <Icon name="chevron-down" size={20} color={colors.textSecondary} />
+              
+              <View style={{ maxHeight: 250, borderWidth: 1, borderColor: colors.border, borderRadius: 8, marginBottom: spacing.xl, backgroundColor: '#FFF' }}>
+                <FlatList
+                  data={assignedLeads}
+                  keyExtractor={item => item.id.toString()}
+                  nestedScrollEnabled={true}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity 
+                      style={{ 
+                        padding: spacing.m, 
+                        borderBottomWidth: 1, 
+                        borderBottomColor: colors.border,
+                        backgroundColor: selectedLeadForNegotiation?.id === item.id ? '#EFF6FF' : '#FFF'
+                      }}
+                      onPress={() => setSelectedLeadForNegotiation(item)}
+                    >
+                      <Text style={{ fontWeight: 'bold', color: colors.text }}>
+                        {item.lead_code} - {item.first_name} {item.last_name}
+                      </Text>
+                      <Text style={{ color: colors.textSecondary, fontSize: typography.sizes.s, marginTop: 4 }}>
+                        <Icon name="phone" size={12} /> {item.phone}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  ListEmptyComponent={<Text style={{ padding: spacing.m, color: colors.textSecondary, textAlign: 'center' }}>Loading leads...</Text>}
+                />
               </View>
 
               <View style={styles.modalActions}>
-                <TouchableOpacity style={styles.proceedBtn} onPress={() => {
-                  setIsModalVisible(false);
-                }}>
+                <TouchableOpacity 
+                  style={[styles.proceedBtn, !selectedLeadForNegotiation && { opacity: 0.5 }]} 
+                  disabled={!selectedLeadForNegotiation}
+                  onPress={() => {
+                    setIsModalVisible(false);
+                    navigation.navigate('StartNegotiation', { lead: selectedLeadForNegotiation });
+                  }}
+                >
                   <Text style={styles.proceedBtnText}>Proceed to Negotiate →</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsModalVisible(false)}>

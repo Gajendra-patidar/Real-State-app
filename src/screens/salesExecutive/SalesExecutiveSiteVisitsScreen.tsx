@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Modal, ScrollView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Modal, ScrollView, Platform, ActivityIndicator, Alert, Image, Linking } from 'react-native';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -27,8 +28,10 @@ export const SalesExecutiveSiteVisitsScreen = () => {
   const fetchSiteVisits = async () => {
     try {
       setIsLoading(true);
-      const data = await salesExecutiveApi.getSiteVisits();
-      setVisits(data?.data || data || []);
+      const res = await salesExecutiveApi.getSiteVisits();
+      console.log('Fetched site visits:', res);
+      const visitsArray = res?.data?.data || [];
+      setVisits(visitsArray);
     } catch (error) {
       console.error('Failed to fetch site visits', error);
     } finally {
@@ -39,7 +42,7 @@ export const SalesExecutiveSiteVisitsScreen = () => {
   // Date Picker State
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [activeDateField, setActiveDateField] = useState<'visitFrom' | 'visitTo' | 'nextFollowDt' | null>(null);
-  
+
   const [visitFromDate, setVisitFromDate] = useState<Date | null>(null);
   const [visitToDate, setVisitToDate] = useState<Date | null>(null);
   const [nextFollowDtDate, setNextFollowDtDate] = useState<Date | null>(null);
@@ -49,6 +52,31 @@ export const SalesExecutiveSiteVisitsScreen = () => {
   const [selectedVisit, setSelectedVisit] = useState<any | null>(null);
   const [rating, setRating] = useState(0);
   const [feedbackText, setFeedbackText] = useState('');
+
+  const [nextActionStep, setNextActionStep] = useState('Schedule Follow-up call');
+  const [isNextActionModalVisible, setIsNextActionModalVisible] = useState(false);
+  const [photos, setPhotos] = useState<string[]>([]);
+
+  const [visitStatus, setVisitStatus] = useState('visited');
+  const [isVisitStatusModalVisible, setIsVisitStatusModalVisible] = useState(false);
+  const [fullScreenImageUri, setFullScreenImageUri] = useState<string | null>(null);
+
+  const [isActionMenuVisible, setIsActionMenuVisible] = useState(false);
+  const [selectedVisitForAction, setSelectedVisitForAction] = useState<any>(null);
+
+  const NEXT_ACTION_OPTIONS = [
+    'Schedule Follow-up call',
+    'Move to price nagotiation',
+    'Draft unit booking',
+    'Not interested / close lead'
+  ];
+
+  const VISIT_STATUS_OPTIONS = [
+    { label: 'Visited / Completed', value: 'visited' },
+    { label: 'Scheduled', value: 'scheduled' },
+    { label: 'Cancelled', value: 'cancelled' },
+    { label: 'Client No-Show', value: 'no_show' }
+  ];
 
   const openDatePicker = (field: 'visitFrom' | 'visitTo' | 'nextFollowDt') => {
     setActiveDateField(field);
@@ -73,7 +101,81 @@ export const SalesExecutiveSiteVisitsScreen = () => {
     setSelectedVisit(visit);
     setRating(0);
     setFeedbackText('');
+    setPhotos([]);
+    setVisitStatus('visited');
+    setNextActionStep('Schedule Follow-up call');
     setIsFeedbackModalVisible(true);
+  };
+
+  const handleUploadPhoto = () => {
+    Alert.alert(
+      'Upload Photo',
+      'Choose photo source',
+      [
+        {
+          text: 'Camera / Selfie',
+          onPress: async () => {
+            try {
+              const result = await launchCamera({ mediaType: 'photo', quality: 0.8 });
+              if (result.assets && result.assets.length > 0) {
+                setPhotos(prev => [...prev, result.assets![0].uri!]);
+              }
+            } catch (err) {
+              console.log('Camera error', err);
+            }
+          }
+        },
+        {
+          text: 'Gallery',
+          onPress: async () => {
+            try {
+              const result = await launchImageLibrary({ mediaType: 'photo', quality: 0.8, selectionLimit: 10 });
+              if (result.assets && result.assets.length > 0) {
+                const uris = result.assets.map(a => a.uri!);
+                setPhotos(prev => [...prev, ...uris]);
+              }
+            } catch (err) {
+              console.log('Gallery error', err);
+            }
+          }
+        },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!selectedVisit) return;
+
+    try {
+      setIsLoading(true);
+      const formData = new FormData();
+      formData.append('project_id', String(selectedVisit.project_id || 1));
+      formData.append('status', visitStatus);
+      formData.append('feedback_notes', feedbackText);
+      formData.append('customer_rating', String(rating));
+      formData.append('latitude', '9.076000');
+      formData.append('longitude', '72.877700');
+
+      if (photos.length > 0) {
+        formData.append('photo', {
+          uri: photos[0],
+          type: 'image/jpeg',
+          name: `photo_${Date.now()}.jpg`
+        } as any);
+      }
+
+      console.log('Submitting feedback for visit:', formData);
+      await salesExecutiveApi.updateSiteVisitStatus(selectedVisit.id, formData);
+      Alert.alert('Success', 'Site visit feedback logged successfully!');
+      setIsFeedbackModalVisible(false);
+      fetchSiteVisits();
+    } catch (error: any) {
+      console.error('Failed to submit feedback:', error);
+      Alert.alert('Error', error?.response?.data?.message || 'Failed to submit feedback');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const renderStatCard = (title: string, value: string | number, icon: string, color: string) => (
@@ -88,58 +190,117 @@ export const SalesExecutiveSiteVisitsScreen = () => {
     </View>
   );
 
-  const renderVisitCard = ({ item }: { item: any }) => (
-    <View style={styles.visitCard}>
-      <View style={styles.cardHeader}>
-        <View style={styles.userInfo}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{item.initials}</Text>
-          </View>
-          <View>
-            <Text style={styles.userName}>{item.customerName}</Text>
-            <Text style={styles.userPhone}>{item.phone}</Text>
-          </View>
-        </View>
-        <View style={styles.statusBadge}>
-          <Text style={styles.statusText}>{item.status}</Text>
-        </View>
-      </View>
+  const renderVisitCard = ({ item }: { item: any }) => {
+    const firstName = item.lead?.first_name || 'Unknown';
+    const lastName = item.lead?.last_name || '';
+    const initials = (firstName.charAt(0) + lastName.charAt(0)).toUpperCase() || 'U';
+    const customerName = `${firstName} ${lastName}`.trim();
+    const phone = item.lead?.phone || 'No Phone';
+    const projectName = item.project?.name || 'Unknown Project';
+    const scheduledDate = item.scheduled_at ? new Date(item.scheduled_at).toLocaleString() : 'No Schedule';
 
-      <View style={styles.detailsBox}>
-        <View style={styles.detailRow}>
-          <Icon name="office-building" size={16} color={colors.textSecondary} style={styles.detailIcon} />
-          <Text style={styles.detailText}>{item.project}</Text>
+    return (
+      <View style={styles.visitCard}>
+        <View style={styles.cardHeader}>
+          <View style={styles.userInfo}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </View>
+            <View>
+              <Text style={styles.userName}>{customerName}</Text>
+              <Text style={styles.userPhone}>{phone}</Text>
+            </View>
+          </View>
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusText}>{item.status}</Text>
+          </View>
         </View>
-        <View style={styles.detailRow}>
-          <Icon name="account-tie" size={16} color={colors.textSecondary} style={styles.detailIcon} />
-          <Text style={styles.detailText}>{item.executive}</Text>
-        </View>
-      </View>
 
-      <View style={styles.cardFooter}>
-        <View style={styles.statusIcons}>
-          <View style={styles.miniBadge}>
-            <Icon name="message-alert-outline" size={14} color={colors.textMuted} />
-            <Text style={styles.miniBadgeText}>No feedback</Text>
+        <View style={styles.detailsBox}>
+          <View style={styles.detailRow}>
+            <Icon name="office-building" size={16} color={colors.textSecondary} style={styles.detailIcon} />
+            <Text style={styles.detailText}>{projectName}</Text>
           </View>
-          <View style={styles.miniBadge}>
-            <Icon name="camera-off-outline" size={14} color={colors.textMuted} />
-            <Text style={styles.miniBadgeText}>No photos</Text>
+          <View style={styles.detailRow}>
+            <Icon name="calendar-clock" size={16} color={colors.textSecondary} style={styles.detailIcon} />
+            <Text style={styles.detailText}>{scheduledDate}</Text>
           </View>
+          {item.pickup_location ? (
+            <View style={styles.detailRow}>
+              <Icon name="map-marker-outline" size={16} color={colors.textSecondary} style={styles.detailIcon} />
+              <Text style={styles.detailText}>{item.pickup_location}</Text>
+            </View>
+          ) : null}
         </View>
-        
-        <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.btnLogFeedback} onPress={() => handleLogFeedback(item)}>
-            <Icon name="comment-edit-outline" size={16} color="#FFF" />
-            {/* <Text style={styles.btnLogFeedbackText}>Log Feedback</Text> */}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.btnWhatsapp}>
-            <Icon name="whatsapp" size={18} color="#FFF" />
-          </TouchableOpacity>
+
+        <View style={styles.cardFooter}>
+          <View style={styles.statusIcons}>
+            <View style={styles.miniBadge}>
+              {item.customer_rating > 0 ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {[...Array(item.customer_rating)].map((_, i) => (
+                    <Icon key={i} name="star" size={14} color="#F59E0B" />
+                  ))}
+                  {item.customer_rating < 5 && [...Array(5 - item.customer_rating)].map((_, i) => (
+                    <Icon key={`empty-${i}`} name="star-outline" size={14} color="#CBD5E1" />
+                  ))}
+                </View>
+              ) : (
+                <>
+                  <Icon name="message-alert-outline" size={14} color={colors.textMuted} />
+                  <Text style={styles.miniBadgeText}>No feedback</Text>
+                </>
+              )}
+            </View>
+            {item.visit_photo_path ? (
+              <TouchableOpacity onPress={() => setFullScreenImageUri(item.visit_photo_path)}>
+                <Image
+                  source={{ uri: item.visit_photo_path }}
+                  style={{ width: 28, height: 28, borderRadius: 4, marginLeft: 8 }}
+                />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.miniBadge}>
+                <Icon name="camera-off-outline" size={14} color={colors.textMuted} />
+                <Text style={styles.miniBadgeText}>No photos</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.actionButtons}>
+            <TouchableOpacity style={styles.btnLogFeedback} onPress={() => handleLogFeedback(item)}>
+              <Icon name="comment-edit-outline" size={16} color="#FFF" />
+              {/* <Text style={styles.btnLogFeedbackText}>Log Feedback</Text> */}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.btnWhatsapp}
+              onPress={() => {
+                if (phone && phone !== 'No Phone') {
+                  const phoneNumber = phone.replace(/[^0-9+]/g, '');
+                  Linking.openURL(`whatsapp://send?phone=${phoneNumber}`).catch(() => {
+                    Alert.alert('Error', 'Make sure WhatsApp is installed on your device');
+                  });
+                } else {
+                  Alert.alert('Error', 'No valid phone number found for this lead.');
+                }
+              }}
+            >
+              <Icon name="whatsapp" size={18} color="#FFF" />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.btnWhatsapp, { backgroundColor: '#475569' }]}
+              onPress={() => {
+                setSelectedVisitForAction(item);
+                setIsActionMenuVisible(true);
+              }}
+            >
+              <Icon name="dots-vertical" size={18} color="#FFF" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -189,7 +350,7 @@ export const SalesExecutiveSiteVisitsScreen = () => {
                 <Icon name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
-            
+
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xxl }}>
               <View style={styles.filterRow}>
                 <View style={styles.filterCol}>
@@ -345,7 +506,7 @@ export const SalesExecutiveSiteVisitsScreen = () => {
       <Modal visible={isFeedbackModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { paddingBottom: insets.bottom + 20, maxHeight: '90%' }]}>
-            
+
             {/* Header */}
             <View style={styles.feedbackHeader}>
               <View style={styles.feedbackHeaderLeft}>
@@ -363,7 +524,19 @@ export const SalesExecutiveSiteVisitsScreen = () => {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xl }}>
-              
+
+              {/* Visit Status Dropdown */}
+              <Text style={styles.inputLabel}>Visit Status <Text style={styles.asterisk}>*</Text></Text>
+              <TouchableOpacity style={styles.actionDropdown} onPress={() => setIsVisitStatusModalVisible(true)}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Icon name="progress-clock" size={18} color={colors.text} style={{ marginRight: 8 }} />
+                  <Text style={styles.actionDropdownText}>
+                    {VISIT_STATUS_OPTIONS.find(opt => opt.value === visitStatus)?.label || 'Select Status'}
+                  </Text>
+                </View>
+                <Icon name="chevron-down" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+
               {/* Rating Section */}
               <Text style={styles.inputLabel}>Customer Interest Rating</Text>
               <View style={styles.ratingRow}>
@@ -390,10 +563,10 @@ export const SalesExecutiveSiteVisitsScreen = () => {
 
               {/* Next Action Dropdown */}
               <Text style={styles.inputLabel}>Next Action Step <Text style={styles.asterisk}>*</Text></Text>
-              <TouchableOpacity style={styles.actionDropdown}>
-                <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                  <Icon name="phone" size={18} color={colors.text} style={{marginRight: 8}} />
-                  <Text style={styles.actionDropdownText}>Schedule Follow-up Call</Text>
+              <TouchableOpacity style={styles.actionDropdown} onPress={() => setIsNextActionModalVisible(true)}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Icon name="phone" size={18} color={colors.text} style={{ marginRight: 8 }} />
+                  <Text style={styles.actionDropdownText}>{nextActionStep}</Text>
                 </View>
                 <Icon name="chevron-down" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
@@ -401,16 +574,35 @@ export const SalesExecutiveSiteVisitsScreen = () => {
               {/* Photos Upload Zone */}
               <View>
                 <Text style={styles.inputLabel} >
-                <Icon name="image-multiple-outline" size={16} /> 
-                <Text>  Visit Photos </Text>
+                  <Icon name="image-multiple-outline" size={16} />
+                  <Text>  Visit Photos </Text>
                 </Text>
                 <Text style={styles.optionalText}>(optional — up to 10 images, 5 MB each)</Text>
               </View>
-              <TouchableOpacity style={styles.uploadZone}>
-                <View style={styles.uploadCloudWrap}>
-                  <Icon name="cloud-upload" size={28} color="#FFF" />
+
+              {photos.length > 0 && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                  {photos.map((uri, idx) => (
+                    <View key={idx} style={{ width: 60, height: 60, borderRadius: 8, backgroundColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+                      <TouchableOpacity style={{ width: '100%', height: '100%' }} onPress={() => setFullScreenImageUri(uri)}>
+                        <Image source={{ uri }} style={{ width: '100%', height: '100%' }} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{ position: 'absolute', top: -5, right: -5, backgroundColor: colors.error, borderRadius: 10, width: 20, height: 20, justifyContent: 'center', alignItems: 'center' }}
+                        onPress={() => setPhotos(photos.filter((_, i) => i !== idx))}
+                      >
+                        <Icon name="close" size={14} color="#FFF" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
                 </View>
-                <Text style={styles.uploadTitle}>Tap to upload site visit photos</Text>
+              )}
+
+              <TouchableOpacity style={styles.uploadZone} onPress={handleUploadPhoto}>
+                <View style={styles.uploadCloudWrap}>
+                  <Icon name="camera-plus" size={24} color="#FFF" />
+                </View>
+                <Text style={styles.uploadTitle}>Tap to take a Selfie or upload photos</Text>
                 <Text style={styles.uploadSubtitle}>JPG, PNG, WEBP — Max 5 MB each</Text>
               </TouchableOpacity>
 
@@ -421,8 +613,8 @@ export const SalesExecutiveSiteVisitsScreen = () => {
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsFeedbackModalVisible(false)}>
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.submitBtn} onPress={() => setIsFeedbackModalVisible(false)}>
-                <Icon name="send" size={18} color="#FFF" style={{marginRight: 8}} />
+              <TouchableOpacity style={styles.submitBtn} onPress={handleSubmitFeedback}>
+                <Icon name="send" size={18} color="#FFF" style={{ marginRight: 8 }} />
                 <Text style={styles.submitBtnText}>Submit</Text>
               </TouchableOpacity>
             </View>
@@ -436,6 +628,139 @@ export const SalesExecutiveSiteVisitsScreen = () => {
         onClose={() => setDatePickerVisible(false)}
         onSelectDate={handleDateSelect}
       />
+
+      {/* Full Screen Image Modal */}
+      <Modal
+        visible={!!fullScreenImageUri}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setFullScreenImageUri(null)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' }}>
+          <TouchableOpacity
+            style={{ position: 'absolute', top: Platform.OS === 'ios' ? 50 : 20, right: 20, zIndex: 1, padding: 8 }}
+            onPress={() => setFullScreenImageUri(null)}
+          >
+            <Icon name="close" size={30} color="#FFF" />
+          </TouchableOpacity>
+          {fullScreenImageUri && (
+            <Image
+              source={{ uri: fullScreenImageUri }}
+              style={{ width: '100%', height: '80%' }}
+              resizeMode="contain"
+            />
+          )}
+        </View>
+      </Modal>
+
+      {/* Visit Status Modal */}
+      <Modal
+        visible={isVisitStatusModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsVisitStatusModalVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsVisitStatusModalVisible(false)}>
+          <View style={[styles.modalContent, { maxHeight: '60%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Visit Status</Text>
+              <TouchableOpacity onPress={() => setIsVisitStatusModalVisible(false)}>
+                <Icon name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {VISIT_STATUS_OPTIONS.map((status, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.m, borderBottomWidth: 1, borderBottomColor: colors.border }}
+                  onPress={() => {
+                    setVisitStatus(status.value);
+                    setIsVisitStatusModalVisible(false);
+                  }}
+                >
+                  <Text style={{ fontSize: typography.sizes.m, color: colors.text }}>{status.label}</Text>
+                  {visitStatus === status.value && <Icon name="check" size={20} color="#6366F1" style={{ marginLeft: 'auto' }} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Action Menu Modal */}
+      <Modal
+        visible={isActionMenuVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsActionMenuVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsActionMenuVisible(false)}>
+          <View style={[styles.modalContent, { maxHeight: '40%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Actions</Text>
+              <TouchableOpacity onPress={() => setIsActionMenuVisible(false)}>
+                <Icon name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              <TouchableOpacity 
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.m, borderBottomWidth: 1, borderBottomColor: colors.border }}
+                onPress={() => {
+                  setIsActionMenuVisible(false);
+                  navigation.navigate('StartNegotiation', { lead: selectedVisitForAction?.lead });
+                }}
+              >
+                <Icon name="handshake" size={20} color={colors.text} style={{ marginRight: 12 }} />
+                <Text style={{ fontSize: typography.sizes.m, color: colors.text }}>Start Negotiation</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.m }}
+                onPress={() => {
+                  setIsActionMenuVisible(false);
+                  navigation.navigate('RecordBooking', { lead: selectedVisitForAction?.lead });
+                }}
+              >
+                <Icon name="file-document-edit-outline" size={20} color={colors.text} style={{ marginRight: 12 }} />
+                <Text style={{ fontSize: typography.sizes.m, color: colors.text }}>Record Booking</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Next Action Modal */}
+      <Modal
+        visible={isNextActionModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsNextActionModalVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsNextActionModalVisible(false)}>
+          <View style={[styles.modalContent, { maxHeight: '60%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Next Action</Text>
+              <TouchableOpacity onPress={() => setIsNextActionModalVisible(false)}>
+                <Icon name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {NEXT_ACTION_OPTIONS.map((action, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.m, borderBottomWidth: 1, borderBottomColor: colors.border }}
+                  onPress={() => {
+                    setNextActionStep(action);
+                    setIsNextActionModalVisible(false);
+                  }}
+                >
+                  <Text style={{ fontSize: typography.sizes.m, color: colors.text }}>{action}</Text>
+                  {nextActionStep === action && <Icon name="check" size={20} color="#6366F1" style={{ marginLeft: 'auto' }} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
@@ -445,10 +770,10 @@ const styles = StyleSheet.create({
   headerSubtitleBox: { paddingHorizontal: spacing.m, paddingBottom: spacing.m, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerSubtitle: { fontSize: typography.sizes.s, color: colors.textSecondary },
   listContent: { padding: spacing.m, paddingBottom: spacing.xxl },
-  
+
   // KPI Stats
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s, marginBottom: spacing.l },
-  statCard: { flex: 1, minWidth: '45%', backgroundColor: colors.surface, borderRadius: 12, padding: spacing.m, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', shadowColor: '#000', shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 },
+  statCard: { flex: 1, minWidth: '45%', backgroundColor: colors.surface, borderRadius: 12, padding: spacing.m, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 },
   statContent: { flex: 1 },
   statTitle: { fontSize: 10, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', marginBottom: 4 },
   statValue: { fontSize: typography.sizes.xl, fontWeight: typography.weights.bold, color: colors.text },
@@ -460,11 +785,11 @@ const styles = StyleSheet.create({
   searchIcon: { marginRight: spacing.s },
   searchInput: { flex: 1, height: 44, fontSize: typography.sizes.m, color: colors.text },
   filterBtn: { width: 44, height: 44, backgroundColor: '#3B82F6', borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  
+
   listTitle: { fontSize: typography.sizes.l, fontWeight: typography.weights.bold, color: colors.text, marginBottom: spacing.m },
 
   // Visit Card
-  visitCard: { backgroundColor: colors.surface, borderRadius: 16, padding: spacing.m, marginBottom: spacing.m, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
+  visitCard: { backgroundColor: colors.surface, borderRadius: 16, padding: spacing.m, marginBottom: spacing.m, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.m },
   userInfo: { flexDirection: 'row', alignItems: 'center' },
   avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#E0E7FF', justifyContent: 'center', alignItems: 'center', marginRight: spacing.s },
@@ -493,7 +818,7 @@ const styles = StyleSheet.create({
   modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.l },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.l },
   modalTitle: { fontSize: typography.sizes.l, fontWeight: typography.weights.bold, color: colors.text },
-  
+
   // Filter Modal specific
   filterRow: { flexDirection: 'row', gap: spacing.m, marginBottom: spacing.m },
   filterCol: { flex: 1 },
@@ -510,19 +835,19 @@ const styles = StyleSheet.create({
   feedbackIconWrap: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#6366F1', justifyContent: 'center', alignItems: 'center', marginRight: spacing.m },
   feedbackSubtitle: { fontSize: typography.sizes.s, color: colors.textSecondary, marginTop: 2 },
   closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-  
+
   inputLabel: { fontSize: typography.sizes.m, fontWeight: typography.weights.bold, color: colors.text, marginTop: spacing.l, marginBottom: spacing.s },
   asterisk: { color: colors.error },
   optionalText: { fontSize: typography.sizes.s, fontWeight: '400', color: colors.textMuted },
-  
+
   ratingRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.s, marginVertical: spacing.s },
   ratingStatusText: { textAlign: 'center', fontSize: typography.sizes.s, color: colors.textSecondary, marginTop: spacing.xs, fontWeight: '600' },
-  
+
   textArea: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.m, fontSize: typography.sizes.m, color: colors.text, height: 120, backgroundColor: '#F8FAFC' },
-  
+
   actionDropdown: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.m, backgroundColor: '#F8FAFC' },
   actionDropdownText: { fontSize: typography.sizes.m, fontWeight: '600', color: colors.text },
-  
+
   uploadZone: { borderWidth: 1, borderColor: '#CBD5E1', borderStyle: 'dashed', borderRadius: 12, padding: spacing.l, alignItems: 'center', backgroundColor: '#F8FAFC', marginTop: spacing.s },
   uploadCloudWrap: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#94A3B8', justifyContent: 'center', alignItems: 'center', marginBottom: spacing.s },
   uploadTitle: { fontSize: typography.sizes.m, fontWeight: '600', color: colors.text, marginBottom: 4 },
