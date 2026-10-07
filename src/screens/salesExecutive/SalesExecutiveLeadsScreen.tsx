@@ -1,10 +1,12 @@
 import React, {useEffect, useState} from 'react';
 import {View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, TextInput, ScrollView, Alert, Modal, KeyboardAvoidingView, Platform} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
+import {useAuth} from '../../hooks/useAuth';
 import {AppHeader} from '../../components/common/AppHeader';
 import {LeadCard} from '../../components/cards/LeadCard';
 import {salesExecutiveApi} from '../../services/api/salesExecutiveApi';
-import {dashboardApi} from '../../services/api/dashboardApi';
+import {chatApi} from '../../services/api/chatApi';
+
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {typography} from '../../theme/typography';
@@ -16,6 +18,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 const STATUS_FILTERS = ['All Statuses', 'New Leads', 'Contacted', 'Follow Up', 'Site Visit', 'Interested', 'Negotiation', 'Converted', 'Lost'];
 
 export const SalesExecutiveLeadsScreen = () => {
+  const { user } = useAuth();
   const { width, numColumns, isTablet } = useResponsive();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
@@ -53,6 +56,19 @@ export const SalesExecutiveLeadsScreen = () => {
   const [isCallLogBudgetModalVisible, setIsCallLogBudgetModalVisible] = useState(false);
 
   const [isAddLeadModalVisible, setIsAddLeadModalVisible] = useState(false);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [addLeadForm, setAddLeadForm] = useState({
+    first_name: '',
+    last_name: '',
+    phone: '',
+    email: '',
+    project_id: '',
+    project_name: '',
+    source: ''
+  });
+  const [isProjectModalVisible, setIsProjectModalVisible] = useState(false);
+  const [isSourceModalVisible, setIsSourceModalVisible] = useState(false);
+  const LEAD_SOURCES = ['Website', 'Broker channel'];
 
   useEffect(() => {
     fetchData();
@@ -61,10 +77,12 @@ export const SalesExecutiveLeadsScreen = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [leadsRes, statsRes, teamRes] = await Promise.all([
+      const [leadsRes, statsRes, teamRes, projectsRes] = await Promise.all([
         salesExecutiveApi.getAssignedLeads().catch(() => null),
         salesExecutiveApi.getDashboard().catch(() => null),
-        dashboardApi.getManagerExecutives().catch(() => null)
+        chatApi.getUsers().catch(() => null)
+      ,
+        salesExecutiveApi.getProjects().catch(() => null)
       ]);
       
       if (leadsRes?.data?.data) {
@@ -92,6 +110,14 @@ export const SalesExecutiveLeadsScreen = () => {
         setTeamMembers(Array.isArray(teamRes.data) ? teamRes.data : []);
       } else {
         setTeamMembers(Array.isArray(teamRes) ? teamRes : []);
+      }
+      
+      if (projectsRes?.data?.data) {
+        setProjects(projectsRes.data.data);
+      } else if (projectsRes?.data) {
+        setProjects(Array.isArray(projectsRes.data) ? projectsRes.data : []);
+      } else {
+        setProjects(Array.isArray(projectsRes) ? projectsRes : []);
       }
     } catch (error) {
       console.log('Error fetching manager leads data', error);
@@ -476,7 +502,7 @@ export const SalesExecutiveLeadsScreen = () => {
 
     // 3. Employee Filter
     if (selectedEmployee) {
-      if (lead.user?.id !== selectedEmployee.id) {
+      if (lead.user?.id !== selectedEmployee.id && lead.assigned_to_user_id !== selectedEmployee.id) {
         return false;
       }
     }
@@ -510,7 +536,7 @@ export const SalesExecutiveLeadsScreen = () => {
                 phone={item.phone}
                 hasWhatsapp={true}
                 property={item.project?.name || 'Any'}
-                assignedExecutive={item.user?.name || 'Unassigned'}
+                assignedExecutive={user?.name || item.user?.name || 'Unassigned'}
                 status={item.status}
                 onViewPress={() => navigation.navigate('SalesExecutiveLeadDetails', { leadId: item.id })}
                 onCallLogPress={() => {
@@ -554,7 +580,7 @@ export const SalesExecutiveLeadsScreen = () => {
         animationType="slide"
         onRequestClose={() => setIsCallLogModalVisible(false)}
       >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
           <View style={[styles.modalContent, { padding: 0, paddingBottom: insets.bottom + 20 }]}>
             
             <View style={styles.addLeadModalHeader}>
@@ -569,7 +595,7 @@ export const SalesExecutiveLeadsScreen = () => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={{ padding: spacing.l }}>
+            <ScrollView contentContainerStyle={{ padding: spacing.l, paddingBottom: 100 }} keyboardShouldPersistTaps="handled">
               
               <View style={{ marginBottom: spacing.m }}>
                 <Text style={styles.inputLabel}>Inquiry Status <Text style={{color: '#EF4444'}}>*</Text></Text>
@@ -710,7 +736,7 @@ export const SalesExecutiveLeadsScreen = () => {
         animationType="slide"
         onRequestClose={() => setIsAddLeadModalVisible(false)}
       >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
           <View style={[styles.modalContent, styles.addLeadModalContent]}>
             <View style={styles.addLeadModalHeader}>
               <View>
@@ -722,43 +748,73 @@ export const SalesExecutiveLeadsScreen = () => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.addLeadForm}>
+            <ScrollView 
+              contentContainerStyle={[styles.addLeadForm, { paddingBottom: 100 }]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.formRow}>
                 <View style={styles.formCol}>
                   <Text style={styles.inputLabel}>First Name <Text style={{color: '#EF4444'}}>*</Text></Text>
-                  <TextInput style={styles.inputBox} placeholder="John" placeholderTextColor={colors.textMuted} />
+                  <TextInput 
+                    style={styles.inputBox} 
+                    placeholder="John" 
+                    placeholderTextColor={colors.textMuted}
+                    value={addLeadForm.first_name}
+                    onChangeText={(text) => setAddLeadForm({...addLeadForm, first_name: text})}
+                  />
                 </View>
                 <View style={styles.formCol}>
                   <Text style={styles.inputLabel}>Last Name</Text>
-                  <TextInput style={styles.inputBox} placeholder="Doe" placeholderTextColor={colors.textMuted} />
+                  <TextInput 
+                    style={styles.inputBox} 
+                    placeholder="Doe" 
+                    placeholderTextColor={colors.textMuted}
+                    value={addLeadForm.last_name}
+                    onChangeText={(text) => setAddLeadForm({...addLeadForm, last_name: text})}
+                  />
                 </View>
               </View>
 
               <View style={styles.formRow}>
                 <View style={styles.formCol}>
                   <Text style={styles.inputLabel}>Phone Number <Text style={{color: '#EF4444'}}>*</Text></Text>
-                  <TextInput style={styles.inputBox} placeholder="+91" keyboardType="phone-pad" placeholderTextColor={colors.textMuted} />
+                  <TextInput 
+                    style={styles.inputBox} 
+                    placeholder="+91" 
+                    keyboardType="phone-pad" 
+                    placeholderTextColor={colors.textMuted}
+                    value={addLeadForm.phone}
+                    onChangeText={(text) => setAddLeadForm({...addLeadForm, phone: text})}
+                  />
                 </View>
                 <View style={styles.formCol}>
                   <Text style={styles.inputLabel}>Email</Text>
-                  <TextInput style={styles.inputBox} placeholder="john@example.com" keyboardType="email-address" placeholderTextColor={colors.textMuted} />
+                  <TextInput 
+                    style={styles.inputBox} 
+                    placeholder="john@example.com" 
+                    keyboardType="email-address" 
+                    placeholderTextColor={colors.textMuted}
+                    value={addLeadForm.email}
+                    onChangeText={(text) => setAddLeadForm({...addLeadForm, email: text})}
+                  />
                 </View>
               </View>
 
               <View style={styles.formRow}>
                 <View style={styles.formCol}>
                   <Text style={styles.inputLabel}>Project Interest</Text>
-                  <View style={styles.inputBoxSelect}>
-                    <Text style={styles.inputText}>Select Project</Text>
+                  <TouchableOpacity style={styles.inputBoxSelect} onPress={() => setIsProjectModalVisible(true)}>
+                    <Text style={styles.inputText}>{addLeadForm.project_name || 'Select Project'}</Text>
                     <Icon name="chevron-down" size={20} color={colors.textSecondary} />
-                  </View>
+                  </TouchableOpacity>
                 </View>
                 <View style={styles.formCol}>
                   <Text style={styles.inputLabel}>Lead Source</Text>
-                  <View style={styles.inputBoxSelect}>
-                    <Text style={styles.inputText}>Select Source</Text>
+                  <TouchableOpacity style={styles.inputBoxSelect} onPress={() => setIsSourceModalVisible(true)}>
+                    <Text style={styles.inputText}>{addLeadForm.source || 'Select Source'}</Text>
                     <Icon name="chevron-down" size={20} color={colors.textSecondary} />
-                  </View>
+                  </TouchableOpacity>
                 </View>
               </View>
 
@@ -766,7 +822,32 @@ export const SalesExecutiveLeadsScreen = () => {
                 <TouchableOpacity style={styles.addLeadCancelBtn} onPress={() => setIsAddLeadModalVisible(false)}>
                   <Text style={styles.addLeadCancelText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.addLeadSaveBtn} onPress={() => setIsAddLeadModalVisible(false)}>
+                <TouchableOpacity style={styles.addLeadSaveBtn} onPress={async () => {
+                   if (!addLeadForm.first_name || !addLeadForm.phone) {
+                     Alert.alert('Validation Error', 'First name and phone are required');
+                     return;
+                   }
+                   try {
+                     const payload = {
+                       first_name: addLeadForm.first_name,
+                       last_name: addLeadForm.last_name,
+                       phone: addLeadForm.phone,
+                       email: addLeadForm.email,
+                       interested_project_id: addLeadForm.project_id || null,
+                       source: addLeadForm.source || null,
+                     };
+                     await salesExecutiveApi.addLead(payload);
+                     Alert.alert('Success', 'Lead created successfully');
+                     setIsAddLeadModalVisible(false);
+                     fetchData(); // Refresh leads
+                     setAddLeadForm({
+                       first_name: '', last_name: '', phone: '', email: '', project_id: '', project_name: '', source: ''
+                     });
+                   } catch (error) {
+                     console.log('Error creating lead:', error);
+                     Alert.alert('Error', 'Failed to create lead');
+                   }
+                }}>
                   <Text style={styles.addLeadSaveText}>Save Lead</Text>
                 </TouchableOpacity>
               </View>
@@ -774,6 +855,75 @@ export const SalesExecutiveLeadsScreen = () => {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Project Selection Modal */}
+      <Modal
+        visible={isProjectModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsProjectModalVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsProjectModalVisible(false)}>
+          <View style={[styles.modalContent, { maxHeight: '60%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Project</Text>
+              <TouchableOpacity onPress={() => setIsProjectModalVisible(false)}>
+                <Icon name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {projects.map(proj => (
+                <TouchableOpacity 
+                  key={proj.id}
+                  style={styles.modalItem}
+                  onPress={() => {
+                    setAddLeadForm(prev => ({ ...prev, project_id: proj.id, project_name: proj.name }));
+                    setIsProjectModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.modalItemText}>{proj.name}</Text>
+                  {addLeadForm.project_id === proj.id && <Icon name="check" size={20} color={colors.primary} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Lead Source Selection Modal */}
+      <Modal
+        visible={isSourceModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsSourceModalVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsSourceModalVisible(false)}>
+          <View style={[styles.modalContent, { maxHeight: '60%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Lead Source</Text>
+              <TouchableOpacity onPress={() => setIsSourceModalVisible(false)}>
+                <Icon name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {LEAD_SOURCES.map(source => (
+                <TouchableOpacity 
+                  key={source}
+                  style={styles.modalItem}
+                  onPress={() => {
+                    setAddLeadForm(prev => ({ ...prev, source }));
+                    setIsSourceModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.modalItemText}>{source}</Text>
+                  {addLeadForm.source === source && <Icon name="check" size={20} color={colors.primary} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
 
     </View>
   );

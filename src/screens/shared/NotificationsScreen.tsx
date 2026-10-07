@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Alert, Modal, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppHeader } from '../../components/common/AppHeader';
@@ -7,73 +7,116 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
 import { Bell, CheckCircle2, MessageSquare, UserPlus, Clock } from 'lucide-react-native';
-
-const MOCK_NOTIFICATIONS = [
-  { id: '1', type: 'lead_assigned', title: 'New Lead Assigned', message: 'Vikram Singh has assigned you a new lead (LD-8801).', time: '10 mins ago', isRead: false },
-  { id: '2', type: 'message', title: 'New Message', message: 'You have a new direct message from Priya Nair regarding Apex Grand Residency.', time: '1 hour ago', isRead: false },
-  { id: '3', type: 'system', title: 'System Update', message: 'Scheduled maintenance will occur tonight at 2 AM.', time: '5 hours ago', isRead: true },
-  { id: '4', type: 'task', title: 'Follow-up Reminder', message: 'Reminder: Call Suresh Reddy at 4 PM today.', time: 'Yesterday', isRead: true },
-  { id: '5', type: 'lead_converted', title: 'Lead Converted!', message: 'Congratulations! Lead LD-7705 has been marked as booked.', time: '2 days ago', isRead: true },
-];
+import { salesExecutiveApi } from '../../services/api/salesExecutiveApi';
 
 export const NotificationsScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const [refreshing, setRefreshing] = useState(false);
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [selectedNotification, setSelectedNotification] = useState<any | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
-  const handleRefresh = () => {
+  const fetchNotifications = async () => {
+    try {
+      const response = await salesExecutiveApi.getNotifications();
+      let notifs: any[] = [];
+      if (Array.isArray(response)) {
+        notifs = response;
+      } else if (response?.data && Array.isArray(response.data)) {
+        notifs = response.data;
+      } else if (response?.data?.data && Array.isArray(response.data.data)) {
+        notifs = response.data.data;
+      } else if (response?.notifications && Array.isArray(response.notifications)) {
+        notifs = response.notifications;
+      }
+      setNotifications(notifs);
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+      Alert.alert('Error', 'Failed to load notifications');
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const handleRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    await fetchNotifications();
+    setRefreshing(false);
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-  };
-
-  const markAsRead = (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+  const markAsRead = async (id: number | string) => {
+    try {
+      await salesExecutiveApi.markNotificationRead(Number(id));
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true, read_at: new Date().toISOString() } : n));
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
   };
 
   const renderIcon = (type: string) => {
-    switch (type) {
-      case 'lead_assigned': return <UserPlus size={20} color={colors.primary} />;
-      case 'message': return <MessageSquare size={20} color={colors.info} />;
-      case 'lead_converted': return <CheckCircle2 size={20} color={colors.success} />;
-      case 'task': return <Clock size={20} color={colors.warning} />;
-      default: return <Bell size={20} color={colors.textMuted} />;
-    }
+    if (!type) return <Bell size={20} color={colors.textMuted} />;
+    if (type.includes('assign')) return <UserPlus size={20} color={colors.primary} />;
+    if (type.includes('message')) return <MessageSquare size={20} color={colors.info} />;
+    if (type.includes('convert') || type.includes('booking')) return <CheckCircle2 size={20} color={colors.success} />;
+    if (type.includes('visit') || type.includes('follow') || type.includes('task')) return <Clock size={20} color={colors.warning} />;
+    return <Bell size={20} color={colors.textMuted} />;
   };
 
   const getIconBg = (type: string) => {
-    switch (type) {
-      case 'lead_assigned': return colors.primary + '15';
-      case 'message': return colors.infoLight;
-      case 'lead_converted': return colors.successLight;
-      case 'task': return colors.warningLight;
-      default: return colors.background;
-    }
+    if (!type) return colors.background;
+    if (type.includes('assign')) return colors.primary + '15';
+    if (type.includes('message')) return colors.infoLight;
+    if (type.includes('convert') || type.includes('booking')) return colors.successLight;
+    if (type.includes('visit') || type.includes('follow') || type.includes('task')) return colors.warningLight;
+    return colors.background;
   };
 
-  const renderItem = ({ item }: { item: typeof MOCK_NOTIFICATIONS[0] }) => (
-    <TouchableOpacity 
-      style={[styles.notificationCard, !item.isRead && styles.unreadCard]}
-      onPress={() => markAsRead(item.id)}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.iconContainer, { backgroundColor: getIconBg(item.type) }]}>
-        {renderIcon(item.type)}
-      </View>
-      <View style={styles.contentContainer}>
-        <View style={styles.headerRow}>
-          <Text style={[styles.title, !item.isRead && styles.unreadTitle]}>{item.title}</Text>
-          <Text style={styles.time}>{item.time}</Text>
+  const formatTitle = (type: string) => {
+    if (!type) return 'Notification';
+    const words = type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1));
+    return words.join(' ');
+  };
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return isNaN(date.getTime()) ? dateString : date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const renderItem = ({ item }: { item: any }) => {
+    const isRead = item.isRead || (item.read_at !== null && item.read_at !== undefined);
+    const title = item.title || item.metadata?.title || item.data?.title || formatTitle(item.activity_type);
+    const message = item.message || item.metadata?.message || item.description || item.data?.message || item.body || '';
+    const type = item.activity_type || item.type || item.data?.type || 'default';
+    const time = item.time || formatDate(item.created_at) || '';
+
+    return (
+      <TouchableOpacity 
+        style={[styles.notificationCard, !isRead && styles.unreadCard]}
+        onPress={() => {
+          if (!isRead) markAsRead(item.id);
+          setSelectedNotification({ item, title, message, type, time });
+          setModalVisible(true);
+        }}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.iconContainer, { backgroundColor: getIconBg(type) }]}>
+          {renderIcon(type)}
         </View>
-        <Text style={styles.message} numberOfLines={2}>{item.message}</Text>
-      </View>
-      {!item.isRead && <View style={styles.unreadDot} />}
-    </TouchableOpacity>
-  );
+        <View style={styles.contentContainer}>
+          <View style={styles.headerRow}>
+            <Text style={[styles.title, !isRead && styles.unreadTitle]} numberOfLines={1} >{title}</Text>
+            <Text style={styles.time}>{time}</Text>
+          </View>
+          <Text style={styles.message} numberOfLines={2}>{message}</Text>
+        </View>
+        {/* {!isRead && <View style={styles.unreadDot} />} */}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -81,106 +124,104 @@ export const NotificationsScreen = () => {
         leftIcon="arrow-left" 
         onLeftPress={() => navigation.goBack()} 
         title="Notifications" 
-        rightIcon="check-all"
-        onRightPress={markAllAsRead}
       />
-      
       <FlatList
         data={notifications}
-        keyExtractor={item => item.id}
         renderItem={renderItem}
-        contentContainerStyle={{ padding: spacing.m, paddingBottom: insets.bottom + 20 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} />}
+        keyExtractor={item => String(item.id)}
+        contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + spacing.xl }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} />
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Bell size={48} color={colors.textMuted} style={{opacity: 0.5, marginBottom: spacing.m}} />
-            <Text style={styles.emptyText}>You're all caught up!</Text>
+            <Bell size={48} color={colors.border} />
+            <Text style={styles.emptyText}>No notifications yet</Text>
           </View>
         }
       />
+
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View style={[styles.modalIconContainer, { backgroundColor: selectedNotification ? getIconBg(selectedNotification.type) : '#eee' }]}>
+                {selectedNotification && renderIcon(selectedNotification.type)}
+              </View>
+              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeButton}>
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>{selectedNotification?.title}</Text>
+              <Text style={styles.modalTime}>{selectedNotification?.time}</Text>
+              
+              <View style={styles.modalDivider} />
+              
+              <Text style={styles.modalMessage}>{selectedNotification?.message}</Text>
+              
+              {selectedNotification?.item?.lead && (
+                <View style={styles.modalExtraData}>
+                  <Text style={styles.modalExtraTitle}>Related Lead</Text>
+                  <Text style={styles.modalExtraText}>Name: {selectedNotification.item.lead.name || selectedNotification.item.lead.first_name}</Text>
+                  <Text style={styles.modalExtraText}>Phone: {selectedNotification.item.lead.phone}</Text>
+                  <Text style={styles.modalExtraText}>Status: {selectedNotification.item.lead.status}</Text>
+                </View>
+              )}
+            </ScrollView>
+            
+            <TouchableOpacity style={styles.modalActionBtn} onPress={() => setModalVisible(false)}>
+              <Text style={styles.modalActionBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F3F4F6' },
+  listContainer: { padding: spacing.m, gap: spacing.s },
   
-  notificationCard: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    padding: spacing.m,
-    borderRadius: 12,
-    marginBottom: spacing.m,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  unreadCard: {
-    backgroundColor: '#F0F9FF', // Very light blue
-    borderColor: '#E0F2FE',
-    borderWidth: 1,
-  },
+  notificationCard: { flexDirection: 'row', backgroundColor: colors.surface, padding: spacing.m, borderRadius: 12, alignItems: 'flex-start', borderWidth: 1, borderColor: 'transparent' },
+  unreadCard: { backgroundColor: '#EEF2FF', borderColor: '#C7D2FE' },
   
-  iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: spacing.m,
-  },
+  iconContainer: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: spacing.m },
   
-  contentContainer: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  title: {
-    fontSize: typography.sizes.m,
-    color: colors.text,
-    fontWeight: '600',
-    flex: 1,
-  },
-  unreadTitle: {
-    fontWeight: '800',
-    color: colors.primary,
-  },
-  time: {
-    fontSize: 11,
-    color: colors.textMuted,
-    marginLeft: 8,
-  },
-  message: {
-    fontSize: typography.sizes.s,
-    color: colors.textSecondary,
-    lineHeight: 18,
-  },
+  contentContainer: { flex: 1 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  title: { fontSize: typography.sizes.m, color: colors.text, flex: 1, marginRight: spacing.s, fontWeight: '500' },
+  unreadTitle: { fontWeight: 'bold' },
+  time: { fontSize: 11, color: colors.textMuted },
+  message: { fontSize: typography.sizes.s, color: colors.textSecondary, lineHeight: 18 },
   
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
-    position: 'absolute',
-    top: spacing.m,
-    right: spacing.m,
-  },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary, marginLeft: spacing.s, marginTop: 6 },
   
-  emptyState: {
-    paddingVertical: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyText: {
-    fontSize: typography.sizes.m,
-    color: colors.textMuted,
-    fontWeight: '500',
-  },
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
+  emptyText: { marginTop: spacing.m, fontSize: typography.sizes.m, color: colors.textMuted },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.l, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.m },
+  modalIconContainer: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
+  closeButton: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
+  closeButtonText: { fontSize: 16, color: colors.textSecondary, fontWeight: 'bold' },
+  modalScroll: { marginBottom: spacing.l },
+  modalTitle: { fontSize: typography.sizes.xl, fontWeight: 'bold', color: colors.text, marginBottom: spacing.xs },
+  modalTime: { fontSize: typography.sizes.s, color: colors.textSecondary, marginBottom: spacing.m },
+  modalDivider: { height: 1, backgroundColor: colors.border, marginBottom: spacing.m },
+  modalMessage: { fontSize: typography.sizes.m, color: colors.text, lineHeight: 22, marginBottom: spacing.l },
+  modalExtraData: { backgroundColor: '#F8FAFC', padding: spacing.m, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
+  modalExtraTitle: { fontSize: typography.sizes.s, fontWeight: 'bold', color: colors.textSecondary, marginBottom: spacing.s, textTransform: 'uppercase' },
+  modalExtraText: { fontSize: typography.sizes.m, color: colors.text, marginBottom: 4, fontWeight: '500' },
+  modalActionBtn: { backgroundColor: colors.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  modalActionBtnText: { color: '#FFF', fontSize: typography.sizes.m, fontWeight: 'bold' },
 });

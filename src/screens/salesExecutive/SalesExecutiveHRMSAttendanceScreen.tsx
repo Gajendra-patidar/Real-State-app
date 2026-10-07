@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, ScrollView, ActivityIndicator, Alert, PermissionsAndroid } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../../hooks/useAuth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { launchCamera } from 'react-native-image-picker';
+import Geolocation from '@react-native-community/geolocation';
 import { AppHeader } from '../../components/common/AppHeader';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
@@ -21,26 +25,190 @@ interface AttendanceRecord {
   shift: string;
 }
 
+
+const GOOGLE_MAPS_API_KEY = "AIzaSyD-zPLVMYmi0V5GRRtdeQivDe8CEFBVL5E";
+
+const requestLocationPermission = async () => {
+  if (Platform.OS === 'ios') {
+    Geolocation.requestAuthorization();
+    return true;
+  }
+  
+  if (Platform.OS === 'android') {
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        {
+          title: 'Location Permission',
+          message: 'This app needs access to your location for attendance tracking.',
+          buttonNeutral: 'Ask Me Later',
+          buttonNegative: 'Cancel',
+          buttonPositive: 'OK',
+        },
+      );
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    } catch (err) {
+      console.warn(err);
+      return false;
+    }
+  }
+  return false;
+};
+
+const getCurrentLocationAndAddress = async (): Promise<{latitude: string, longitude: string, address: string}> => {
+  const hasPermission = await requestLocationPermission();
+  if (!hasPermission) {
+    throw new Error('Location permission denied');
+  }
+
+  return new Promise((resolve, reject) => {
+    Geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`);
+          const data = await response.json();
+          let address = 'Location not found';
+          if (data.results && data.results.length > 0) {
+            address = data.results[0].formatted_address;
+          }
+          resolve({ latitude: latitude.toString(), longitude: longitude.toString(), address });
+        } catch (_error) {
+          resolve({ latitude: latitude.toString(), longitude: longitude.toString(), address: 'Error fetching address' });
+        }
+      },
+      (error) => {
+        reject(error);
+      },
+      { enableHighAccuracy: false, timeout: 30000, maximumAge: 10000 }
+    );
+  });
+};
+
 export const SalesExecutiveHRMSAttendanceScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const { user, role } = useAuth();
   const [isClockedIn, setIsClockedIn] = useState(false);
+  const [clockInTime, setClockInTime] = useState<Date | null>(null);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchAttendance = async () => {
-      try {
-        const response = await salesExecutiveApi.getAttendance();
-        setAttendance(response?.data || response || []);
-      } catch (error) {
-        console.error('Failed to fetch attendance:', error);
-      } finally {
-        setLoading(false);
+  const fetchAttendance = async () => {
+    try {
+      const response = await salesExecutiveApi.getAttendance();
+      console.log('Attendance fetched:', response);
+      let apiData = [];
+      if (response && response.data && Array.isArray(response.data.data)) {
+        apiData = response.data.data;
+      } else if (response && Array.isArray(response.data)) {
+        apiData = response.data;
+      } else if (Array.isArray(response)) {
+        apiData = response;
       }
-    };
+      
+      const mappedData = apiData.map((item: any) => ({
+        id: item.id || Math.random().toString(),
+        name: user?.name || user?.first_name || 'Executive',
+        role: role || 'Sales Executive',
+        status: item.status === 'present' ? 'Present' : (item.status || 'Present'),
+        checkIn: item.clock_in ? `${item.date} ${item.clock_in}` : 'N/A',
+        checkInLoc: item.address || 'N/A',
+        checkOut: item.clock_out ? `${item.date} ${item.clock_out}` : '--:--',
+        checkOutLoc: item.checkout_address || 'N/A',
+        shift: 'Morning',
+      }));
+      setAttendance(mappedData);
+    } catch (error) {
+      console.error('Failed to fetch attendance:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchAttendance();
+    loadClockState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadClockState = async () => {
+    try {
+      const clockedIn = await AsyncStorage.getItem('isClockedIn');
+      const time = await AsyncStorage.getItem('clockInTime');
+      if (clockedIn === 'true' && time) {
+        setIsClockedIn(true);
+        setClockInTime(new Date(time));
+      }
+    } catch (e) {
+      console.log('Failed to load clock state');
+    }
+  };
+
+  const handleClockToggle = async () => {
+    try {
+      if (isClockedIn) {
+        console.log('Clock out response:');
+        const response = await salesExecutiveApi.clockOut();
+        console.log('Clock out response:', response);
+        setIsClockedIn(false);
+        setClockInTime(null);
+        await AsyncStorage.removeItem('isClockedIn');
+        await AsyncStorage.removeItem('clockInTime');
+        Alert.alert('Success', 'Clocked out successfully');
+        fetchAttendance();
+      } else {
+        launchCamera({ mediaType: 'photo', cameraType: 'front' }, async (response) => {
+          if (response.didCancel) {
+            console.log('User cancelled image picker');
+            return;
+          } else if (response.errorCode) {
+            console.log('ImagePicker Error: ', response.errorMessage);
+            Alert.alert('Error', 'Could not open camera');
+            return;
+          }
+
+          if (response.assets && response.assets.length > 0) {
+            const asset = response.assets[0];
+            try {
+              const locationData = await getCurrentLocationAndAddress();
+              
+              const formData = new FormData();
+              formData.append('work_location', 'office');
+              formData.append('latitude', locationData.latitude);
+              formData.append('longitude', locationData.longitude);
+              formData.append('address', locationData.address);
+              formData.append('selfie', {
+                uri: asset.uri,
+                type: asset.type || 'image/jpeg',
+                name: asset.fileName || 'selfie.jpg',
+              } as any);
+
+              console.log('Clock in response data:', formData);
+              const res = await salesExecutiveApi.clockIn(formData);
+              console.log('Clock in response:', res);
+              const now = new Date();
+              setIsClockedIn(true);
+              setClockInTime(now);
+              await AsyncStorage.setItem('isClockedIn', 'true');
+              await AsyncStorage.setItem('clockInTime', now.toISOString());
+              Alert.alert('Success', 'Clocked in successfully');
+              fetchAttendance();
+            } catch (error: any) {
+              console.error('Failed to toggle clock status or fetch location:', error?.response?.data || error);
+              const backendMsg = error?.response?.data?.message || error.message || 'Failed to update attendance status';
+              Alert.alert('Error', backendMsg);
+            }
+          }
+        });
+      }
+    } catch (error: any) {
+      console.error('Failed to toggle clock status:', error?.response?.data || error);
+      const backendMsg = error?.response?.data?.message || 'Failed to update attendance status';
+      const validationErrors = error?.response?.data?.errors ? JSON.stringify(error.response.data.errors) : '';
+      Alert.alert('Error', `${backendMsg} \n ${validationErrors}`);
+    }
+  };
 
   const renderStatBox = (label: string, value: string, color: string) => (
     <View style={[styles.statBox, { borderTopColor: color }]}>
@@ -113,17 +281,14 @@ export const SalesExecutiveHRMSAttendanceScreen = () => {
                 </View>
               </View>
 
-              <Text style={styles.clockStatus}>{isClockedIn ? 'On the clock' : 'Off the clock'}</Text>
+              <Text style={styles.clockStatus}>{isClockedIn && clockInTime ? `Started at ${clockInTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Off the clock'}</Text>
               <Text style={styles.clockDesc}>Click below to start today's attendance.</Text>
 
-              <TouchableOpacity style={styles.dropdownInput}>
-                <Text style={styles.dropdownText}>Office Desk</Text>
-                <Icon name="chevron-down" size={20} color="#D1FAE5" />
-              </TouchableOpacity>
+
 
               <TouchableOpacity 
                 style={[styles.clockBtn, isClockedIn ? {backgroundColor: '#EF4444'} : {backgroundColor: '#FFF'}]}
-                onPress={() => setIsClockedIn(!isClockedIn)}
+                onPress={handleClockToggle}
               >
                 <Icon name="clock-outline" size={20} color={isClockedIn ? '#FFF' : '#047857'} style={{marginRight: 8}} />
                 <Text style={[styles.clockBtnText, isClockedIn ? {color: '#FFF'} : {color: '#047857'}]}>
@@ -151,14 +316,14 @@ export const SalesExecutiveHRMSAttendanceScreen = () => {
               <Text style={styles.sectionTitle}>Daily Summary List</Text>
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsScroll}>
+            <View style={styles.statsGrid}>
               {renderStatBox('Total Emp', '5', '#4B5563')}
               {renderStatBox('Present', '0', '#059669')}
               {renderStatBox('Late', '0', '#F59E0B')}
               {renderStatBox('Absent', '5', '#EF4444')}
               {renderStatBox('Leave', '0', '#8B5CF6')}
               {renderStatBox('Offday', '0', '#6B7280')}
-            </ScrollView>
+            </View>
 
             {/* List Header */}
             <View style={styles.sectionHeader}>
@@ -209,10 +374,10 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: typography.sizes.l, fontWeight: 'bold', color: colors.text },
   sectionSubtitle: { fontSize: typography.sizes.s, color: colors.textSecondary, marginTop: 2 },
 
-  statsScroll: { paddingHorizontal: spacing.m, paddingBottom: spacing.m, gap: spacing.s },
-  statBox: { backgroundColor: colors.surface, padding: spacing.m, borderRadius: 12, minWidth: 90, borderTopWidth: 3, shadowColor: '#000', shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-  statBoxLabel: { fontSize: 11, fontWeight: 'bold', color: colors.textSecondary, marginBottom: 4 },
-  statBoxValue: { fontSize: 24, fontWeight: '900' },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.m, paddingBottom: spacing.m, justifyContent: 'space-between', rowGap: spacing.m },
+  statBox: { width: '31%', backgroundColor: colors.surface, paddingVertical: spacing.m, paddingHorizontal: 8, borderRadius: 12, borderTopWidth: 3, shadowColor: '#000', shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1, alignItems: 'center' },
+  statBoxLabel: { fontSize: 11, fontWeight: 'bold', color: colors.textSecondary, marginBottom: 4, textAlign: 'center' },
+  statBoxValue: { fontSize: 22, fontWeight: '900', textAlign: 'center' },
 
   employeeCard: { backgroundColor: colors.surface, marginHorizontal: spacing.m, marginBottom: spacing.m, borderRadius: 12, padding: spacing.m, shadowColor: '#000', shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 },
   empHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.m },

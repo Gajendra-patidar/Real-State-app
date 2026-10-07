@@ -2,27 +2,59 @@ import api from './axiosInstance';
 
 export const chatApi = {
   getConversations: async () => {
-    const response = await api.get('/chat/conversations');
-    return response.data;
+    try {
+      const response = await api.get('executive/chat/single/conversations');
+      return response.data;
+    } catch (error) {
+      console.error("getConversations API ERROR:", error);
+      throw error;
+    }
+  },
+
+  getUsers: async () => {
+    try {
+      // Mocking the user list until the backend API route is confirmed, preventing 404s.
+      return {
+        data: [
+          { id: 1, name: 'Amit Kulkarni (Executive 5)', role: {name: 'Sales Executive'}, email: 'amit.exec@apexrealty.com' },
+          { id: 2, name: 'Anil Verma (Admin)', role: {name: 'Admin'}, email: 'admin@apexrealty.com' },
+          { id: 3, name: 'Anjali Mehta (Manager)', role: {name: 'Manager'}, email: 'anjali.manager@apexrealty.com' },
+          { id: 4, name: 'Deepika Roy (Executive 7)', role: {name: 'Sales Executive'}, email: 'deepika.exec@apexrealty.com' },
+        ]
+      };
+    } catch (error) {
+      console.error("getUsers API ERROR:", error);
+      throw error;
+    }
   },
 
   getMessages: async (chatId: number) => {
-    const response = await api.get(`/chat/${chatId}/messages`);
-    return response.data;
+    try {
+      const response = await api.get(`executive/chat/single/${chatId}/messages`);
+      return response.data;
+    } catch (error) {
+      console.error("getMessages API ERROR:", error);
+      throw error;
+    }
   },
 
   sendMessage: async (chatId: number, payload: { message: string }) => {
-    const response = await api.post(`/chat/${chatId}/messages`, payload);
-    return response.data;
+    try {
+      const response = await api.post(`executive/chat/single/${chatId}/messages`, payload);
+      return response.data;
+    } catch (error) {
+      console.error("sendMessage API ERROR:", error);
+      throw error;
+    }
   },
 
-  startDirectChat: async (payload: { user_id: number }) => {
-    const response = await api.post('/chat/direct', payload);
-    return response.data;
-  },
-
-  createGroupChat: async (payload: { name: string; user_ids: number[] }) => {
-    const response = await api.post('/chat/group', payload);
-    return response.data;
-  },
+  startSingleChat: async (payload: { user_id: number }) => {
+    try {
+      const response = await api.post('executive/chat/single/start', payload);
+      return response.data;
+    } catch (error) {
+      console.error("startSingleChat API ERROR:", error);
+      throw error;
+    }
+  }
 };

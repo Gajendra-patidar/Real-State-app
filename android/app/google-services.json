@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1075628362989",
+    "project_id": "urban-property-6721b",
+    "storage_bucket": "urban-property-6721b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1075628362989:android:870680e7a3df797a0c10e4",
+        "android_client_info": {
+          "package_name": "com.realstate"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC3BEjVNVqetkLA-XJGLzRHZIEIKoDxF94"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

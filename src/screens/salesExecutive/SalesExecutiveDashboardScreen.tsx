@@ -67,9 +67,10 @@ const STATUS_MAP: Record<string, {bg: string; text: string; border: string; labe
 interface KpiCardProps {
   label: string; value: string | number; sub: string;
   icon: React.ReactNode; accent: string; accentBg: string;
+  onPress?: () => void;
 }
-const KpiCard: React.FC<KpiCardProps> = ({label, value, sub, icon, accent, accentBg}) => (
-  <View style={[styles.kpiCard, {borderLeftColor: accent}]}>
+const KpiCard: React.FC<KpiCardProps> = ({label, value, sub, icon, accent, accentBg, onPress}) => (
+  <TouchableOpacity style={[styles.kpiCard, {borderLeftColor: accent}]} onPress={onPress} activeOpacity={0.8}>
     <View style={[styles.kpiIconWrap, {backgroundColor: accentBg}]}>{icon}</View>
     <Text style={styles.kpiLabel}>{label}</Text>
     <Text style={[styles.kpiValue, {color: accent}]}>{value}</Text>
@@ -77,7 +78,7 @@ const KpiCard: React.FC<KpiCardProps> = ({label, value, sub, icon, accent, accen
       <Text style={styles.kpiSub}>{sub}</Text>
       <ArrowUpRight size={12} color={accent} />
     </View>
-  </View>
+  </TouchableOpacity>
 );
 
 // Status Badge
@@ -141,9 +142,13 @@ export const SalesExecutiveDashboardScreen = () => {
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [assignedLeads, setAssignedLeads] = useState<any[]>([]);
-  const [timeFilter, setTimeFilter] = useState('Today');
+  const [timeFilter, setTimeFilter] = useState<'today' | 'this_week' | 'this_month'>('today');
 
-  const filters = ['Today', 'This Week', 'This Month', 'Custom'];
+  const FILTER_OPTIONS: { label: string; value: 'today' | 'this_week' | 'this_month' }[] = [
+    { label: 'Today', value: 'today' },
+    { label: 'This Week', value: 'this_week' },
+    { label: 'This Month', value: 'this_month' },
+  ];
 
   useEffect(() => { fetchAll(); }, [timeFilter]);
 
@@ -154,8 +159,7 @@ export const SalesExecutiveDashboardScreen = () => {
       let lData: any[] = [];
 
       try {
-        console.log("sales dasborad");
-        let r = await salesExecutiveApi.getDashboard(timeFilter.toLowerCase().replace(' ', '_'));
+        let r = await salesExecutiveApi.getDashboard(timeFilter);
         if (typeof r === 'string') {
           try { r = JSON.parse(r); } catch (e) {}
         }
@@ -192,9 +196,16 @@ export const SalesExecutiveDashboardScreen = () => {
   }
 
   const firstName = (user?.name || 'Executive').split(' ')[0];
-  const assignedCount = dashboardData?.total_assigned_leads || dashboardData?.assigned_leads_count || 0;
-  const siteVisits = (dashboardData?.site_visits_today || 0) + (dashboardData?.site_visits_upcoming || 0);
-  const convertedBookings = dashboardData?.total_bookings || convertedBookings;
+  const assignedCount      = dashboardData?.total_assigned_leads ?? 0;
+  const newLeads           = dashboardData?.new_leads ?? 0;
+  const inProgressLeads    = dashboardData?.in_progress_leads ?? 0;
+  const convertedLeads     = dashboardData?.converted_leads ?? 0;
+  const lostLeads          = dashboardData?.lost_leads ?? 0;
+  const siteVisitsToday    = dashboardData?.site_visits_today ?? 0;
+  const siteVisitsUpcoming = dashboardData?.site_visits_upcoming ?? 0;
+  const siteVisits         = siteVisitsToday + siteVisitsUpcoming;
+  const pendingFollowUps   = dashboardData?.pending_follow_ups ?? 0;
+  const totalBookings      = dashboardData?.total_bookings ?? 0;
 
   return (
     <View style={[styles.root]}>
@@ -251,44 +262,56 @@ export const SalesExecutiveDashboardScreen = () => {
         {/* ── Time Filters ──────────────────────────────────────────── */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
           style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
-          {filters.map(f => (
-            <TouchableOpacity key={f}
-              style={[styles.filterChip, timeFilter === f && styles.filterChipActive]}
-              onPress={() => setTimeFilter(f)}>
-              <Text style={[styles.filterText, timeFilter === f && styles.filterTextActive]}>{f}</Text>
+          {FILTER_OPTIONS.map(f => (
+            <TouchableOpacity key={f.value}
+              style={[styles.filterChip, timeFilter === f.value && styles.filterChipActive]}
+              onPress={() => setTimeFilter(f.value)}>
+              <Text style={[styles.filterText, timeFilter === f.value && styles.filterTextActive]}>{f.label}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        {/* ── KPI Grid (3 cards) ────────────────────────────────────── */}
+        {/* ── KPI Grid ────────────────────────────────────────────────── */}
         <View style={styles.sectionLabelRow}>
           <Text style={styles.sectionLabel}>My Performance</Text>
           <Activity size={16} color={colors.secondary} />
         </View>
         <View style={styles.kpiGrid}>
           <KpiCard
-            label="ASSIGNED QUEUE"
-            value={`${assignedCount} Leads`}
-            sub="Active Queue Inquiries"
+            label="ASSIGNED LEADS"
+            value={assignedCount}
+            sub={`${newLeads} New · ${inProgressLeads} In Progress`}
             icon={<Users size={18} color={colors.secondary} />}
             accent={colors.secondary}
             accentBg={colors.infoLight}
+            onPress={() => navigation.navigate('Leads')}
           />
           <KpiCard
             label="SITE VISITS"
-            value={`${siteVisits} Visits`}
-            sub="Scheduled Tours"
+            value={siteVisits}
+            sub={`${siteVisitsToday} Today · ${siteVisitsUpcoming} Upcoming`}
             icon={<MapPin size={18} color={colors.warning} />}
             accent={colors.warning}
             accentBg={colors.warningLight}
+            onPress={() => navigation.navigate('Visits')}
           />
           <KpiCard
-            label="CONVERTED BOOKINGS"
-            value={`${convertedBookings} Booked`}
-            sub="Closed Deals"
+            label="BOOKINGS"
+            value={totalBookings}
+            sub={`${convertedLeads} Converted · ${lostLeads} Lost`}
             icon={<Trophy size={18} color={colors.success} />}
             accent={colors.success}
             accentBg={colors.successLight}
+            onPress={() => navigation.navigate('Bookings')}
+          />
+          <KpiCard
+            label="PENDING FOLLOW-UPS"
+            value={pendingFollowUps}
+            sub="Scheduled calls"
+            icon={<Phone size={18} color={colors.error} />}
+            accent={colors.error}
+            accentBg={'#FEE2E2'}
+            onPress={() => navigation.navigate('FollowUps')}
           />
         </View>
 
@@ -335,7 +358,7 @@ export const SalesExecutiveDashboardScreen = () => {
             ))
           )}
 
-          <TouchableOpacity style={styles.viewAllBtn}>
+          <TouchableOpacity style={styles.viewAllBtn} onPress={() => navigation.navigate('Leads')}>
             <Text style={styles.viewAllText}>Open Full Pipeline</Text>
             <ChevronRight size={16} color={colors.secondary} />
           </TouchableOpacity>

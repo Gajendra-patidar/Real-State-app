@@ -1,5 +1,5 @@
 import React from 'react';
-import {View, Platform} from 'react-native';
+import {View} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -7,17 +7,18 @@ import {
   LayoutDashboard,
   Users,
   PlusCircle,
-  Banknote,
   UserCircle,
 } from 'lucide-react-native';
 import {colors} from '../theme/colors';
 
-import {BrokerDashboardScreen}  from '../screens/broker/BrokerDashboardScreen';
-import {BrokerLeadsScreen}      from '../screens/broker/BrokerLeadsScreen';
-import {BrokerSubmitLeadScreen} from '../screens/broker/BrokerSubmitLeadScreen';
-import {ProfileScreen}          from '../screens/shared/ProfileScreen';
+import {BrokerDashboardScreen}   from '../screens/broker/BrokerDashboardScreen';
+import {BrokerLeadsScreen}       from '../screens/broker/BrokerLeadsScreen';
+import {BrokerSubmitLeadScreen}  from '../screens/broker/BrokerSubmitLeadScreen';
+import {ProfileScreen}           from '../screens/shared/ProfileScreen';
+import {BrokerCommissionScreen}  from '../screens/broker/BrokerCommissionScreen';
+import {BrokerNotificationsScreen} from '../screens/broker/BrokerNotificationsScreen';
 
-const Tab = createBottomTabNavigator();
+const Tab   = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 const TAB_ICON_SIZE = 22;
@@ -35,7 +36,6 @@ const TabNavigator = () => {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          // Key fix: add paddingBottom = device bottom inset so bar sits above home indicator / gesture bar
           paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
           paddingTop: 10,
           height: 60 + (insets.bottom > 0 ? insets.bottom : 10),
@@ -52,17 +52,18 @@ const TabNavigator = () => {
         },
         tabBarIcon: ({color, focused}) => {
           const size = TAB_ICON_SIZE;
-          if (route.name === 'Dashboard') return <LayoutDashboard size={size} color={color} strokeWidth={focused ? 2.5 : 1.8} />;
-          if (route.name === 'MyLeads')   return <Users size={size} color={color} strokeWidth={focused ? 2.5 : 1.8} />;
-          if (route.name === 'Submit')    return <PlusCircle size={size} color={color} strokeWidth={focused ? 2.5 : 1.8} />;
-          if (route.name === 'Profile')   return <UserCircle size={size} color={color} strokeWidth={focused ? 2.5 : 1.8} />;
+          const sw   = focused ? 2.5 : 1.8;
+          if (route.name === 'Dashboard')   return <LayoutDashboard size={size} color={color} strokeWidth={sw} />;
+          if (route.name === 'MyLeads')     return <Users           size={size} color={color} strokeWidth={sw} />;
+          if (route.name === 'Submit')      return <PlusCircle      size={size} color={color} strokeWidth={sw} />;
+          if (route.name === 'Profile')     return <UserCircle      size={size} color={color} strokeWidth={sw} />;
           return <LayoutDashboard size={size} color={color} />;
         },
       })}>
-      <Tab.Screen name="Dashboard" component={BrokerDashboardScreen} />
-      <Tab.Screen name="MyLeads"   component={BrokerLeadsScreen}     options={{title: 'My Leads'}} />
-      <Tab.Screen name="Submit"    component={BrokerSubmitLeadScreen} options={{title: 'Submit Lead'}} />
-      <Tab.Screen name="Profile"   component={ProfileScreen} />
+      <Tab.Screen name="Dashboard"  component={BrokerDashboardScreen} />
+      <Tab.Screen name="MyLeads"    component={BrokerLeadsScreen}     options={{title: 'My Leads'}} />
+      <Tab.Screen name="Submit"     component={BrokerSubmitLeadScreen} options={{title: 'Submit Lead'}} />
+      <Tab.Screen name="Profile"    component={ProfileScreen} />
     </Tab.Navigator>
   );
 };
@@ -70,5 +71,7 @@ const TabNavigator = () => {
 export const BrokerNavigator = () => (
   <Stack.Navigator screenOptions={{headerShown: false}}>
     <Stack.Screen name="BrokerTabs" component={TabNavigator} />
+    <Stack.Screen name="Commission" component={BrokerCommissionScreen} />
+    <Stack.Screen name="Notifications" component={BrokerNotificationsScreen} />
   </Stack.Navigator>
 );

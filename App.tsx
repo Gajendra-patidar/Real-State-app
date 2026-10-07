@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { notificationService } from './src/services/notificationService';
 import {StatusBar, View} from 'react-native';
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import {Provider} from 'react-redux';
@@ -7,6 +8,10 @@ import {RootNavigator} from './src/navigation/RootNavigator';
 import {colors} from './src/theme/colors';
 
 const App = () => {
+  useEffect(() => {
+    notificationService.setup();
+  }, []);
+
   return (
     <Provider store={store}>
       <SafeAreaProvider>

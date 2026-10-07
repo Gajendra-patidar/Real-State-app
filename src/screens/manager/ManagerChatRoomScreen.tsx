@@ -1,20 +1,98 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, FlatList } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
+import { chatApi } from '../../services/api/chatApi';
+import { useAuth } from '../../hooks/useAuth';
 
 export const ManagerChatRoomScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const insets = useSafeAreaInsets();
-  const [message, setMessage] = useState('');
+  const { user } = useAuth();
   
-  const { name = 'Unknown', role = 'Member', isGroup = false } = route.params || {};
+  const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState<any[]>([]);
+  
+  const { chatId, name = 'Unknown', role = 'Member', isGroup = false } = route.params || {};
   const initials = name.substring(0, 1).toUpperCase();
+
+  useEffect(() => {
+    let intervalId;
+    if (chatId) {
+      fetchChatMessages();
+      
+      // Polling for real-time updates every 3 seconds
+      intervalId = setInterval(() => {
+        fetchChatMessages();
+      }, 3000);
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [chatId]);
+
+  const fetchChatMessages = async () => {
+    try {
+      const res = await chatApi.getMessages(chatId);
+      let msgs = [];
+      if (res?.messages && Array.isArray(res.messages)) {
+        msgs = res.messages;
+      } else if (res?.data?.data && Array.isArray(res.data.data)) {
+        msgs = res.data.data;
+      } else if (res?.data && Array.isArray(res.data)) {
+        msgs = res.data;
+      } else if (Array.isArray(res)) {
+        msgs = res;
+      }
+      // Sort newest-first for inverted FlatList
+      msgs.sort((a, b) => {
+        const timeA = new Date(a.created_at || a.updated_at).getTime() || a.id;
+        const timeB = new Date(b.created_at || b.updated_at).getTime() || b.id;
+        return timeB - timeA;
+      });
+      setMessages(msgs);
+    } catch (error) {
+      console.log('Error fetching chat messages', error);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!message.trim() || !chatId) return;
+    const msgObj = { message: message.trim() };
+    setMessage('');
+    
+    // Optimistic UI update
+    const tempId = Date.now();
+    setMessages(prev => [{ id: tempId, message: msgObj.message, is_sender: true, created_at: new Date().toISOString(), user_id: user?.id, sender_id: user?.id }, ...prev]);
+
+    try {
+      await chatApi.sendMessage(chatId, msgObj);
+      fetchChatMessages();
+    } catch (error) {
+      console.log('Error sending message', error);
+    }
+  };
+
+  const renderMessage = ({ item }: { item: any }) => {
+    // If the API returns sender_id, compare it to the logged in user's ID
+    const isMyMessage = item.is_sender === true || item.sender_id === user?.id || item.user_id === user?.id || item.is_me === true;
+    
+    return (
+      <View style={[{ padding: 12, borderRadius: 8, marginBottom: 8, maxWidth: '80%' }, isMyMessage ? { backgroundColor: '#3B82F6', alignSelf: 'flex-end', borderBottomRightRadius: 0 } : { backgroundColor: '#E2E8F0', alignSelf: 'flex-start', borderBottomLeftRadius: 0 }]}>
+        <Text style={{ color: isMyMessage ? '#FFF' : '#333' }}>{item.message}</Text>
+        {item.created_at && (
+          <Text style={{ fontSize: 10, color: isMyMessage ? '#DBEAFE' : '#94A3B8', marginTop: 4, alignSelf: 'flex-end' }}>
+            {new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) !== 'Invalid Date' ? new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+          </Text>
+        )}
+      </View>
+    );
+  };
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -40,13 +118,24 @@ export const ManagerChatRoomScreen = () => {
       </View>
 
       {/* Chat Area */}
-      <ScrollView contentContainerStyle={styles.chatArea}>
-        <View style={styles.emptyState}>
-          <Icon name="chat-processing-outline" size={48} color={colors.border} />
-          <Text style={styles.emptyText}>No messages yet</Text>
-          <Text style={styles.emptySubText}>Send a message to start the conversation.</Text>
-        </View>
-      </ScrollView>
+      <View style={styles.chatArea}>
+        {messages.length === 0 ? (
+          <View style={[styles.emptyState, { flex: 1, justifyContent: 'center' }]}>
+            <Icon name="chat-processing-outline" size={48} color={colors.border} />
+            <Text style={styles.emptyText}>No messages yet</Text>
+            <Text style={styles.emptySubText}>Send a message to start the conversation.</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={messages}
+            keyExtractor={item => (item.id || Math.random()).toString()}
+            renderItem={renderMessage}
+            contentContainerStyle={{ padding: spacing.m }}
+            inverted={true}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
+      </View>
 
       {/* Input Area */}
       <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, spacing.m) }]}>
@@ -61,7 +150,7 @@ export const ManagerChatRoomScreen = () => {
           onChangeText={setMessage}
           multiline
         />
-        <TouchableOpacity style={[styles.sendBtn, message.trim() ? styles.sendBtnActive : {}]}>
+        <TouchableOpacity style={[styles.sendBtn, message.trim() ? styles.sendBtnActive : {}]} onPress={handleSendMessage}>
           <Icon name="send" size={20} color="#FFF" />
         </TouchableOpacity>
       </View>
@@ -80,7 +169,7 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: typography.sizes.s, color: colors.textSecondary },
   infoBtn: { padding: spacing.m },
 
-  chatArea: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.m },
+  chatArea: { flexGrow: 1, padding: spacing.m },
   emptyState: { alignItems: 'center' },
   emptyText: { marginTop: spacing.s, fontSize: typography.sizes.m, fontWeight: 'bold', color: colors.textSecondary },
   emptySubText: { fontSize: typography.sizes.s, color: colors.textMuted },

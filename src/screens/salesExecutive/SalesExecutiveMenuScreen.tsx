@@ -53,11 +53,11 @@ const ExpandableMenuItem = ({ icon, title, iconColor, subItems, isLast = false }
         <Text style={styles.menuItemText}>{title}</Text>
         <Icon name={expanded ? "chevron-down" : "chevron-right"} size={20} color={colors.textMuted} />
       </TouchableOpacity>
-      
+
       {expanded && (
         <View style={{ backgroundColor: '#F9FAFB', paddingVertical: 8 }}>
           {subItems.map((item: any, index: number) => (
-            <TouchableOpacity 
+            <TouchableOpacity
               key={index}
               style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingLeft: 64, paddingRight: 20 }}
               onPress={() => {
@@ -95,10 +95,12 @@ export const SalesExecutiveMenuScreen = () => {
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Logout', style: 'destructive', onPress: async () => {
+      {
+        text: 'Logout', style: 'destructive', onPress: async () => {
           await AsyncStorage.removeItem('auth_token');
           dispatch(logout());
-      }}
+        }
+      }
     ]);
   };
 
@@ -109,18 +111,22 @@ export const SalesExecutiveMenuScreen = () => {
       </View>
 
       <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}>
-        
+
         {/* Profile Card */}
-        <TouchableOpacity style={styles.profileCard} onPress={() => navigation.navigate('Profile')} activeOpacity={0.8}>
+        {/* <TouchableOpacity style={styles.profileCard} onPress={() => navigation.navigate('Profile')} activeOpacity={0.8}> */}
+        <View style={styles.profileCard}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
           <View style={styles.profileTextWrap}>
-            <Text style={styles.profileName}>{userName}</Text>
+            <Text style={styles.profileName} numberOfLines={1}>
+              {userName}
+            </Text>
             <Text style={styles.profileRole}>{role?.replace('_', ' ') || 'Sales Executive'}</Text>
           </View>
-          <Icon name="chevron-right" size={24} color={colors.textMuted} />
-        </TouchableOpacity>
+          {/* <Icon name="chevron-right" size={24} color={colors.textMuted} /> */}
+        </View>
+        {/* </TouchableOpacity> */}
 
         {/* Sales & Pipeline Group */}
         <SectionHeader title="Sales & Pipeline" />
@@ -129,7 +135,8 @@ export const SalesExecutiveMenuScreen = () => {
           <MenuItem icon="contacts" title="Contacts" routeName="Contacts" iconColor="#10B981" />
           <MenuItem icon="office-building" title="Properties" routeName="Properties" iconColor="#F59E0B" />
           <MenuItem icon="map-marker" title="Site Visits" routeName="Visits" iconColor="#EC4899" />
-          <MenuItem icon="handshake" title="Negotiations" routeName="Negotiations" iconColor="#D97706" isLast />
+          <MenuItem icon="handshake" title="Negotiations" routeName="Negotiations" iconColor="#D97706" />
+          <MenuItem icon="check-decagram" title="Booked" routeName="Bookings" iconColor="#10B981" isLast />
         </View>
 
         {/* Operations Group */}
@@ -137,15 +144,15 @@ export const SalesExecutiveMenuScreen = () => {
         <View style={styles.cardGroup}>
           <MenuItem icon="format-list-checks" title="Tasks" routeName="Tasks" iconColor="#8B5CF6" />
           <MenuItem icon="rocket-launch" title="Follow-ups" routeName="FollowUps" iconColor="#F97316" />
-          <ExpandableMenuItem 
-            icon="account-clock" 
-            title="HRMS" 
-            iconColor="#3B82F6" 
+          <ExpandableMenuItem
+            icon="account-clock"
+            title="HRMS"
+            iconColor="#3B82F6"
             subItems={[
               { title: 'Dashboard', routeName: 'HRMSDashboard' },
               { title: 'Attendance', routeName: 'HRMSAttendance' },
               { title: 'Leave Management', routeName: 'HRMSLeaveManagement' },
-              { title: 'Payroll & Salary', routeName: 'HRMSPayroll' }
+              // { title: 'Payroll & Salary', routeName: 'HRMSPayroll' }
             ]}
           />
           <MenuItem icon="headset" title="Support Desk" routeName="SupportDesk" iconColor="#06B6D4" />
@@ -153,15 +160,15 @@ export const SalesExecutiveMenuScreen = () => {
         </View>
 
         {/* Personal & Settings Group */}
-        <SectionHeader title="Personal" />
+        {/* <SectionHeader title="Personal" />
         <View style={styles.cardGroup}>
           <MenuItem icon="shield-check" title="My Permissions" routeName="Permissions" iconColor="#3F6212" isLast />
-        </View>
+        </View> */}
         {/* Management Group */}
         <SectionHeader title="Management" />
         <View style={styles.cardGroup}>
           <MenuItem icon="chart-bar" title="Reports" routeName="Reports" iconColor="#4F46E5" />
-          <MenuItem icon="format-list-bulleted" title="Activity Log" routeName="ActivityLog" iconColor="#0F766E" isLast />
+          {/* <MenuItem icon="format-list-bulleted" title="Activity Log" routeName="ActivityLog" iconColor="#0F766E" isLast /> */}
         </View>
         {/* Logout Button */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
@@ -177,7 +184,7 @@ export const SalesExecutiveMenuScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F4F6', 
+    backgroundColor: '#F3F4F6',
   },
   header: {
     backgroundColor: colors.surface,
@@ -194,7 +201,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: spacing.m,
   },
-  
+
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',

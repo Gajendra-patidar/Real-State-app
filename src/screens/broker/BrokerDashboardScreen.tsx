@@ -6,10 +6,14 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Modal,
+  Image,
   Alert,
+  Linking,
   Platform,
   Dimensions,
 } from 'react-native';
+import Clipboard from '@react-native-clipboard/clipboard';
 import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useAuth} from '../../hooks/useAuth';
 import {brokerApi} from '../../services/api/brokerApi';
@@ -34,6 +38,8 @@ import {
   Copy,
   Eye,
   Sparkles,
+  MapPin,
+  X,
 } from 'lucide-react-native';
 import {useResponsive} from '../../hooks/useResponsive';
 
@@ -132,18 +138,18 @@ const LeadRow: React.FC<LeadRowProps> = ({name, code, phone, property, date, sta
 
 // ─── Project Card ────────────────────────────────────────────────────────────
 interface ProjectCardProps {
-  city: string; unitsFree: number; name: string;
+  city: string; type: string; name: string;
   onPreview: () => void; onCopy: () => void;
 }
-const ProjectCard: React.FC<ProjectCardProps> = ({city, unitsFree, name, onPreview, onCopy}) => (
+const ProjectCard: React.FC<ProjectCardProps> = ({city, type, name, onPreview, onCopy}) => (
   <View style={styles.projectCard}>
     <View style={styles.projectCardHeader}>
       <View style={styles.projectCityBadge}>
         <Text style={styles.projectCityText}>{(city || '').toUpperCase()}</Text>
       </View>
-      <View style={[styles.unitsBadge, {backgroundColor: unitsFree > 0 ? colors.successLight : colors.errorLight}]}>
-        <Text style={[styles.unitsText, {color: unitsFree > 0 ? colors.success : colors.error}]}>
-          {unitsFree} Free
+      <View style={[styles.unitsBadge, {backgroundColor: colors.infoLight}]}>
+        <Text style={[styles.unitsText, {color: colors.info, textTransform: 'capitalize'}]}>
+          {type || 'Project'}
         </Text>
       </View>
     </View>
@@ -162,8 +168,118 @@ const ProjectCard: React.FC<ProjectCardProps> = ({city, unitsFree, name, onPrevi
   </View>
 );
 
+
+// ─── Project Detail Modal ───────────────────────────────────────────────────
+const ProjectDetailModal = ({project, visible, onClose}: any) => {
+  if (!project) return null;
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)'}}>
+        <View style={{backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '85%'}}>
+          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16}}>
+            <Text style={{fontSize: 20, fontWeight: '700', color: colors.text, flex: 1}}>{project.name}</Text>
+            <TouchableOpacity onPress={onClose} style={{padding: 4, backgroundColor: colors.background, borderRadius: 16}}>
+              <X size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {project.banner_image ? (
+              <Image source={{uri: "https://urbanproperty.in" + project.banner_image}} style={{width: '100%', height: 160, borderRadius: 12, backgroundColor: colors.border, marginBottom: 16}} />
+            ) : (
+              <View style={{width: '100%', height: 160, borderRadius: 12, backgroundColor: colors.infoLight, justifyContent: 'center', alignItems: 'center', marginBottom: 16}}>
+                <Building2 size={40} color={colors.secondary} />
+              </View>
+            )}
+            
+            <View style={{flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 20}}>
+              <MapPin size={16} color={colors.textSecondary} style={{marginTop: 2}} />
+              <Text style={{fontSize: 14, color: colors.textSecondary, flex: 1, lineHeight: 20}}>
+                {project.location_address || `${project.city}, ${project.state}`}
+              </Text>
+            </View>
+
+            <View style={{backgroundColor: colors.background, borderRadius: 12, padding: 16, gap: 12}}>
+              <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+                <Text style={{color: colors.textMuted, fontSize: 13}}>Project Code</Text>
+                <Text style={{color: colors.text, fontWeight: '600', fontSize: 13}}>{project.code}</Text>
+              </View>
+              <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+                <Text style={{color: colors.textMuted, fontSize: 13}}>Type</Text>
+                <Text style={{color: colors.text, fontWeight: '600', fontSize: 13, textTransform: 'capitalize'}}>{project.project_type || 'N/A'}</Text>
+              </View>
+              <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+                <Text style={{color: colors.textMuted, fontSize: 13}}>RERA Number</Text>
+                <Text style={{color: colors.text, fontWeight: '600', fontSize: 13}}>{project.rera_number || 'N/A'}</Text>
+              </View>
+            </View>
+
+            
+            {project.units && project.units.length > 0 && (
+              <View style={{marginTop: 24}}>
+                <Text style={{fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 12, letterSpacing: 0.5, textTransform: 'uppercase'}}>Units Inventory</Text>
+                {project.units.map((u: any) => {
+                  const s = (u.status || '').toLowerCase();
+                  let sColor = colors.success;
+                  let sBg = colors.successLight;
+                  if (s === 'booked' || s === 'sold') {
+                    sColor = colors.textSecondary;
+                    sBg = colors.background;
+                  } else if (s === 'hold') {
+                    sColor = colors.warning;
+                    sBg = colors.warningLight;
+                  }
+                  
+                  return (
+                    <View key={u.id} style={{flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, marginBottom: 8}}>
+                      <View style={{flex: 1}}>
+                        <View style={{flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4}}>
+                          <Text style={{fontSize: 15, fontWeight: '700', color: colors.text}}>{u.unit_number}</Text>
+                          <View style={{backgroundColor: colors.infoLight, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6}}>
+                            <Text style={{fontSize: 10, fontWeight: '700', color: colors.info}}>{u.unit_type}</Text>
+                          </View>
+                        </View>
+                        <Text style={{fontSize: 12, color: colors.textSecondary}}>{u.carpet_area} sq.ft</Text>
+                      </View>
+                      <View style={{alignItems: 'flex-end'}}>
+                        <Text style={{fontSize: 14, fontWeight: '800', color: colors.primary, marginBottom: 4}}>
+                          {u.final_price ? `₹${Number(u.final_price).toLocaleString('en-IN')}` : 'N/A'}
+                        </Text>
+                        <View style={{backgroundColor: sBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12}}>
+                          <Text style={{fontSize: 10, fontWeight: '700', color: sColor, textTransform: 'capitalize'}}>{u.status}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {project.company && (
+              <View style={{marginTop: 24}}>
+                <Text style={{fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 12, letterSpacing: 0.5, textTransform: 'uppercase'}}>Developer Info</Text>
+                <View style={{backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 16}}>
+                  <Text style={{fontSize: 15, fontWeight: '700', color: colors.primary, marginBottom: 4}}>{project.company.name}</Text>
+                  <View style={{flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4}}>
+                    <Phone size={12} color={colors.textSecondary} />
+                    <Text style={{fontSize: 13, color: colors.textSecondary}}>{project.company.phone}</Text>
+                  </View>
+                  <View style={{flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4}}>
+                    <Globe size={12} color={colors.textSecondary} />
+                    <Text style={{fontSize: 13, color: colors.textSecondary}}>{project.company.email}</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+            <View style={{height: 40}} />
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
 // ─── Main Screen ─────────────────────────────────────────────────────────────
-export const BrokerDashboardScreen = () => {
+export const BrokerDashboardScreen = ({navigation}: {navigation: any}) => {
   const {user} = useAuth();
   const insets = useSafeAreaInsets();
   const { width: screenWidth, isTablet, isLandscape } = useResponsive();
@@ -171,6 +287,7 @@ export const BrokerDashboardScreen = () => {
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [recentLeads, setRecentLeads] = useState<any[]>([]);
   const [publicProjects, setPublicProjects] = useState<any[]>([]);
+  const [selectedProject, setSelectedProject] = useState<any>(null);
   const [timeFilter, setTimeFilter] = useState('Today');
 
   const filters = ['Today', 'This Week', 'This Month', 'Custom'];
@@ -202,8 +319,8 @@ export const BrokerDashboardScreen = () => {
         pData = r.data || [];
       } catch {
         pData = [
-          {id:1, name:'Apex Grand Residency', city:'HYDERABAD', available_units_count:3},
-          {id:2, name:'Subh Angan', city:'INDORE', available_units_count:0},
+          {id:1, name:'Apex Grand Residency', city:'HYDERABAD', project_type:'residential', location_address:'Gachibowli, Hyderabad', rera_number:'P02400009876', code:'AGR-01'},
+          {id:2, name:'Subh Angan', city:'INDORE', project_type:'commercial', location_address:'MG Road, Indore', rera_number:'P09900012345', code:'SUB-02'},
         ];
       }
       setDashboardData(dData);
@@ -245,7 +362,7 @@ export const BrokerDashboardScreen = () => {
             <Text style={styles.headerDate}>{getFormattedDate()} • Channel Partner</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.bellBtn}>
+        <TouchableOpacity style={styles.bellBtn} onPress={() => navigation.navigate('Notifications')}>
           <Bell size={20} color={colors.primary} />
           <View style={styles.bellDot} />
         </TouchableOpacity>
@@ -272,11 +389,11 @@ export const BrokerDashboardScreen = () => {
           </View>
           {/* Quick Actions */}
           <View style={styles.heroActions}>
-            <TouchableOpacity style={styles.heroPrimaryBtn}>
+            <TouchableOpacity style={styles.heroPrimaryBtn} onPress={() => navigation.navigate('Submit')} >
               <Plus size={16} color={colors.primary} />
               <Text style={styles.heroPrimaryBtnText}>Submit Lead</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.heroSecondaryBtn}>
+            <TouchableOpacity style={styles.heroSecondaryBtn} onPress={() => { Alert.alert('Coming Soon', 'Referral link sharing will be available in a future update.'); }}>
               <Link2 size={16} color="rgba(255,255,255,0.85)" />
               <Text style={styles.heroSecondaryBtnText}>Referral Link</Text>
             </TouchableOpacity>
@@ -346,7 +463,7 @@ export const BrokerDashboardScreen = () => {
               <Text style={styles.sectionTitle}>My Referral Leads</Text>
               <Text style={styles.sectionSub}>Live milestone & status tracking</Text>
             </View>
-            <TouchableOpacity style={styles.sectionPillBtn}>
+            <TouchableOpacity style={styles.sectionPillBtn} onPress={() => navigation.navigate('Submit')}>
               <Plus size={14} color={colors.surface} />
               <Text style={styles.sectionPillBtnText}>New Lead</Text>
             </TouchableOpacity>
@@ -373,7 +490,7 @@ export const BrokerDashboardScreen = () => {
             ))
           )}
 
-          <TouchableOpacity style={styles.viewAllBtn}>
+          <TouchableOpacity style={styles.viewAllBtn} onPress={() => navigation.navigate('MyLeads')}>
             <Text style={styles.viewAllText}>View All Leads</Text>
             <ChevronRight size={16} color={colors.secondary} />
           </TouchableOpacity>
@@ -399,17 +516,28 @@ export const BrokerDashboardScreen = () => {
               <ProjectCard
                 key={p.id}
                 city={p.city || 'LOCATION'}
-                unitsFree={p.available_units_count}
+                type={p.project_type || 'Project'}
                 name={p.name}
-                onPreview={() => {}}
-                onCopy={() => {}}
+                onPreview={() => setSelectedProject(p)}
+                onCopy={() => {
+                  const link = p.share_link || `https://reoscrm.com/project/${p.code}`;
+                  Clipboard.setString(link);
+                }}
               />
             ))}
           </ScrollView>
         </View>
 
+        
         <View style={{height: spacing.xl}} />
       </ScrollView>
+
+      {/* Project Detail Modal */}
+      <ProjectDetailModal 
+        project={selectedProject} 
+        visible={!!selectedProject} 
+        onClose={() => setSelectedProject(null)} 
+      />
     </View>
   );
 };
@@ -655,7 +783,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   kpiValue: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '800',
     marginBottom: 4,
   },

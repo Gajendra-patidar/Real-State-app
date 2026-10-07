@@ -44,17 +44,17 @@ export const SalesExecutiveTasksScreen = () => {
   const fetchTasks = async () => {
     setLoading(true);
     try {
-      const response = await salesExecutiveApi.getFollowUps();
-      
+      const response = await salesExecutiveApi.getCalendar();
+      console.log('Fetched tasks:', response);
       let list = [];
-      if (Array.isArray(response)) {
-        list = response;
-      } else if (response && Array.isArray(response.data)) {
-        list = response.data;
-      } else if (response && response.data && Array.isArray(response.data.data)) {
-        list = response.data.data;
+      if (response && response.data) {
+        const eventsArr = response.data.events || [];
+        const upcomingArr = response.data.upcoming_events || [];
+        const allEvents = [...eventsArr, ...upcomingArr];
+        // Deduplicate by id
+        const uniqueEvents = Array.from(new Map(allEvents.map(item => [item.id, item])).values());
+        list = uniqueEvents;
       }
-      
       setEvents(list);
     } catch (error) {
       console.log('Error fetching tasks', error);
@@ -95,23 +95,26 @@ export const SalesExecutiveTasksScreen = () => {
 
   const getEventsForDate = (day: number) => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return Array.isArray(events) ? events.filter(e => e.date === dateStr || e.scheduled_at?.startsWith(dateStr)) : [];
+    return Array.isArray(events) ? events.filter(e => e.start?.startsWith(dateStr) || e.scheduled_at?.startsWith(dateStr) || e.date?.startsWith(dateStr)) : [];
   };
 
   const selectedEvents = selectedDay ? getEventsForDate(selectedDay) : [];
 
   const renderEventCard = ({ item }: { item: typeof events[0] }) => {
-    const cat = CATEGORIES.find(c => c.id === item.type) || CATEGORIES[0];
+    const timeString = item.start ? new Date(item.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (item.time || '12:00 PM');
+    const color = item.color || item.backgroundColor || CATEGORIES[0].color;
+    const bg = color + '20'; // light version of the color for background
+    const label = item.extendedProps?.category || item.event_type || CATEGORIES[0].label;
     
     return (
       <View style={styles.eventCard}>
-        <View style={[styles.eventTimeLine, { backgroundColor: cat.color }]} />
+        <View style={[styles.eventTimeLine, { backgroundColor: color }]} />
         <View style={styles.eventContent}>
-          <Text style={styles.eventTime}>{item.time}</Text>
+          <Text style={styles.eventTime}>{timeString}</Text>
           <Text style={styles.eventTitle}>{item.title}</Text>
-          <View style={[styles.eventTag, { backgroundColor: cat.bg }]}>
-            <View style={[styles.eventDot, { backgroundColor: cat.color }]} />
-            <Text style={[styles.eventTagText, { color: cat.color }]}>{cat.label}</Text>
+          <View style={[styles.eventTag, { backgroundColor: bg }]}>
+            <View style={[styles.eventDot, { backgroundColor: color }]} />
+            <Text style={[styles.eventTagText, { color: color }]}>{label}</Text>
           </View>
         </View>
       </View>
@@ -130,10 +133,11 @@ export const SalesExecutiveTasksScreen = () => {
             <Text style={styles.pageTitle}>Calendar & Event Schedule</Text>
             <Text style={styles.pageSubtitle}>View all scheduled property site visits, client follow-up calls, and booking milestones.</Text>
           </View>
-          <TouchableOpacity style={styles.btnNewEvent} onPress={() => setIsNewEventModalVisible(true)}>
+          {/* <TouchableOpacity style={styles.btnNewEvent} onPress={() => setIsNewEventModalVisible(true)}>
             <Icon name="plus" size={16} color="#FFF" style={{marginRight: 4}} />
             <Text style={styles.btnNewEventText}>New Event</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
+          
         </View>
 
         {/* Calendar Card */}

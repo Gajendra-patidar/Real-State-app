@@ -8,13 +8,91 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
 
-const MOCK_TICKETS: any[] = [];
+import { salesExecutiveApi } from '../../services/api/salesExecutiveApi';
+
+const ISSUE_CATEGORIES = [
+  'Technical Issue',
+  'Billing & Subscription',
+  'Inventory / Units',
+  'Lead / CRM Pipeline',
+  'General Query'
+];
+
+const PRIORITIES = [
+  'Medium',
+  'High',
+  'Urgent'
+];
 
 export const ManagerSupportDeskScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const [activeFilter, setActiveFilter] = useState('All');
   const [isRaiseTicketModalVisible, setIsRaiseTicketModalVisible] = useState(false);
+  const [tickets, setTickets] = useState<any[]>([]);
+
+  const [subject, setSubject] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('General Query');
+  const [priority, setPriority] = useState('Medium');
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
+
+  React.useEffect(() => {
+    fetchTickets();
+  }, []);
+
+  const fetchTickets = async () => {
+    try {
+      const response = await salesExecutiveApi.getSupportTickets();
+      if (response && response.success && response.data && Array.isArray(response.data.data)) {
+        setTickets(response.data.data);
+      } else if (response && Array.isArray(response.data)) {
+        setTickets(response.data);
+      } else if (Array.isArray(response)) {
+        setTickets(response);
+      }
+    } catch (error) {
+      console.error('Error fetching tickets:', error);
+    }
+  };
+
+  const getFilteredTickets = () => {
+    if (activeFilter === 'All') return tickets;
+    return tickets.filter(t => t.status?.toLowerCase() === activeFilter.toLowerCase());
+  };
+
+  const getStatusCount = (status: string) => {
+    return tickets.filter(t => t.status?.toLowerCase() === status.toLowerCase()).length.toString();
+  };
+
+  const handleSubmitTicket = async () => {
+    try {
+      if (!subject || !description) return;
+
+      let apiCategory = category;
+      if (category === 'Technical Issue') apiCategory = 'Technical';
+      else if (category === 'Billing & Subscription') apiCategory = 'Billing';
+      else if (category === 'Inventory / Units') apiCategory = 'Inventory';
+      else if (category === 'Lead / CRM Pipeline') apiCategory = 'Lead';
+      else if (category === 'General Query') apiCategory = 'General';
+
+      await salesExecutiveApi.createSupportTicket({ 
+        category: apiCategory,
+        subject: subject, 
+        description: description, 
+        priority: priority.toLowerCase() 
+      });
+      setIsRaiseTicketModalVisible(false);
+      setSubject('');
+      setDescription('');
+      setCategory('General Query');
+      setPriority('Medium');
+      fetchTickets();
+    } catch (error: any) {
+      console.error('Error creating ticket:', error?.response?.data || error);
+    }
+  };
 
   const filters = ['All', 'Open', 'In Progress', 'Resolved'];
 
@@ -31,8 +109,8 @@ export const ManagerSupportDeskScreen = () => {
       <AppHeader leftIcon="arrow-left" onLeftPress={() => navigation.goBack()} title="Support Tickets" />
 
       <FlatList
-        data={MOCK_TICKETS}
-        keyExtractor={(item: any) => item.id}
+        data={getFilteredTickets()}
+        keyExtractor={(item: any) => item.id?.toString() || Math.random().toString()}
         contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
         ListHeaderComponent={
           <>
@@ -47,10 +125,10 @@ export const ManagerSupportDeskScreen = () => {
             </View>
 
             <View style={styles.statsGrid}>
-              {renderStatCard('OPEN TICKETS', '0', 'Awaiting Agent', '#F59E0B')}
-              {renderStatCard('IN PROGRESS', '0', 'Active Investigation', '#3B82F6')}
-              {renderStatCard('RESOLVED', '0', 'Solution Provided', '#10B981')}
-              {renderStatCard('CLOSED', '0', 'Completed & Closed', '#64748B')}
+              {renderStatCard('OPEN TICKETS', getStatusCount('open'), 'Awaiting Agent', '#F59E0B')}
+              {renderStatCard('IN PROGRESS', getStatusCount('in progress'), 'Active Investigation', '#3B82F6')}
+              {renderStatCard('RESOLVED', getStatusCount('resolved'), 'Solution Provided', '#10B981')}
+              {renderStatCard('CLOSED', getStatusCount('closed'), 'Completed & Closed', '#64748B')}
             </View>
 
             <View style={styles.listHeaderRow}>
@@ -72,7 +150,16 @@ export const ManagerSupportDeskScreen = () => {
         }
         renderItem={({ item }) => (
           <View style={styles.card}>
-            <Text>{item.id}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+              <Text style={{ fontWeight: 'bold', color: colors.text }}>{item.ticket_number || item.ticket_code || `TCK-${item.id}`}</Text>
+              <Text style={{ fontSize: 12, color: item.status === 'open' ? '#F59E0B' : (item.status === 'resolved' || item.status === 'closed' ? '#10B981' : colors.textSecondary), textTransform: 'uppercase', fontWeight: 'bold' }}>{item.status}</Text>
+            </View>
+            <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 4 }}>{item.subject}</Text>
+            <Text style={{ fontSize: 14, color: colors.textSecondary, marginBottom: 12 }} numberOfLines={2}>{item.description}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 12, color: colors.textSecondary }}>{item.category}</Text>
+              <Text style={{ fontSize: 12, color: (item.priority?.toLowerCase() === 'high' || item.priority?.toLowerCase() === 'urgent') ? '#EF4444' : '#3B82F6', fontWeight: 'bold', textTransform: 'uppercase' }}>Priority: {item.priority}</Text>
+            </View>
           </View>
         )}
         ListEmptyComponent={
@@ -114,32 +201,54 @@ export const ManagerSupportDeskScreen = () => {
                 style={styles.textInput} 
                 placeholder="e.g. Lead assignment not updating..."
                 placeholderTextColor={colors.textMuted}
+                value={subject}
+                onChangeText={setSubject}
               />
 
               <View style={styles.rowInputs}>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, zIndex: 10 }}>
                   <Text style={styles.inputLabel}>ISSUE CATEGORY</Text>
-                  <TouchableOpacity style={styles.dropdownInput}>
-                    <Text style={styles.dropdownText}>General Query</Text>
-                    <Icon name="chevron-down" size={20} color={colors.textSecondary} />
+                  <TouchableOpacity style={styles.dropdownInput} onPress={() => {setShowCategoryDropdown(!showCategoryDropdown); setShowPriorityDropdown(false);}}>
+                    <Text style={styles.dropdownText}>{category}</Text>
+                    <Icon name={showCategoryDropdown ? "chevron-up" : "chevron-down"} size={20} color={colors.textSecondary} />
                   </TouchableOpacity>
+                  {showCategoryDropdown && (
+                    <View style={styles.dropdownListContainer}>
+                      {ISSUE_CATEGORIES.map((cat, idx) => (
+                        <TouchableOpacity key={idx} style={styles.dropdownListItem} onPress={() => {setCategory(cat); setShowCategoryDropdown(false);}}>
+                          <Text style={[styles.dropdownListText, category === cat && styles.dropdownListTextActive]}>{cat}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
                 </View>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, zIndex: 10 }}>
                   <Text style={styles.inputLabel}>PRIORITY</Text>
-                  <TouchableOpacity style={styles.dropdownInput}>
-                    <Text style={styles.dropdownText}>Medium</Text>
-                    <Icon name="chevron-down" size={20} color={colors.textSecondary} />
+                  <TouchableOpacity style={styles.dropdownInput} onPress={() => {setShowPriorityDropdown(!showPriorityDropdown); setShowCategoryDropdown(false);}}>
+                    <Text style={styles.dropdownText}>{priority}</Text>
+                    <Icon name={showPriorityDropdown ? "chevron-up" : "chevron-down"} size={20} color={colors.textSecondary} />
                   </TouchableOpacity>
+                  {showPriorityDropdown && (
+                    <View style={styles.dropdownListContainer}>
+                      {PRIORITIES.map((pri, idx) => (
+                        <TouchableOpacity key={idx} style={styles.dropdownListItem} onPress={() => {setPriority(pri); setShowPriorityDropdown(false);}}>
+                          <Text style={[styles.dropdownListText, priority === pri && styles.dropdownListTextActive]}>{pri}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
                 </View>
               </View>
 
-              <Text style={styles.inputLabel}>DETAILED DESCRIPTION</Text>
+              <Text style={[styles.inputLabel, { marginTop: showCategoryDropdown || showPriorityDropdown ? 140 : spacing.m }]}>DETAILED DESCRIPTION</Text>
               <TextInput 
                 style={[styles.textInput, styles.textArea]} 
                 placeholder="Provide step-by-step details about the issue or request..."
                 placeholderTextColor={colors.textMuted}
                 multiline
                 textAlignVertical="top"
+                value={description}
+                onChangeText={setDescription}
               />
 
             </ScrollView>
@@ -148,7 +257,7 @@ export const ManagerSupportDeskScreen = () => {
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsRaiseTicketModalVisible(false)}>
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.submitBtn} onPress={() => setIsRaiseTicketModalVisible(false)}>
+              <TouchableOpacity style={styles.submitBtn} onPress={handleSubmitTicket}>
                 <Text style={styles.submitBtnText}>Submit Ticket</Text>
               </TouchableOpacity>
             </View>
@@ -207,9 +316,13 @@ const styles = StyleSheet.create({
   textInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: spacing.m, height: 48, backgroundColor: colors.surface, fontSize: typography.sizes.m, color: colors.text, fontWeight: '500' },
   textArea: { height: 100, paddingTop: spacing.m },
 
-  rowInputs: { flexDirection: 'row', gap: spacing.m },
+  rowInputs: { flexDirection: 'row', gap: spacing.m, zIndex: 10 },
   dropdownInput: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: spacing.m, height: 48, backgroundColor: colors.surface },
   dropdownText: { fontSize: typography.sizes.m, color: colors.text, flex: 1, fontWeight: '500' },
+  dropdownListContainer: { position: 'absolute', top: 80, left: 0, right: 0, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingVertical: spacing.s, zIndex: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 5 },
+  dropdownListItem: { paddingVertical: 10, paddingHorizontal: spacing.m },
+  dropdownListText: { fontSize: typography.sizes.m, color: colors.text, fontWeight: '500' },
+  dropdownListTextActive: { color: '#4F46E5', fontWeight: 'bold' },
 
   footerRow: { flexDirection: 'row', gap: spacing.m, marginTop: spacing.xl, paddingTop: spacing.m, borderTopWidth: 1, borderTopColor: colors.border },
   cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },

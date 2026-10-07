@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, SafeAreaView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, SafeAreaView, ActivityIndicator } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { AppHeader } from '../../components/common/AppHeader';
 import { colors } from '../../theme/colors';
@@ -8,7 +8,7 @@ import { typography } from '../../theme/typography';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useResponsive } from '../../hooks/useResponsive';
 import { DatePickerModal } from '../../components/common/DatePickerModal';
-
+import { salesExecutiveApi } from '../../services/api/salesExecutiveApi';
 const LeadInfoCard = ({ name, phone }: { name?: string, phone?: string }) => (
   <View style={styles.leadInfoCard}>
     <View style={styles.avatar}>
@@ -249,32 +249,121 @@ export const RecordBookingScreen = () => {
   );
 };
 
+const REASONS_FOR_DROP = [
+  'Budget Issue',
+  'Location Mismatch',
+  'Bought Elsewhere',
+  'Fake / Invalid Number',
+  'Not Answering (Multiple Attempts)',
+  'Postponed Buying Plan',
+  'Competitor Pricing Better',
+  'Other'
+];
+
 export const DropLeadScreen = () => {
   const { maxWidth } = useResponsive();
   const navigation = useNavigation();
   const route = useRoute<any>();
   const lead = route.params?.lead;
 
+  const [reason, setReason] = useState('Select Reason');
+  const [showReasonDropdown, setShowReasonDropdown] = useState(false);
+  const [remarks, setRemarks] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleDropLead = async () => {
+    if (reason === 'Select Reason') {
+      Alert.alert('Error', 'Please select a reason for dropping the lead.');
+      return;
+    }
+    
+    if (!lead?.id) {
+      Alert.alert('Error', 'Lead ID is missing.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const payload = { 
+        reason: reason,
+        notes: remarks || ""
+      };
+      
+      await salesExecutiveApi.dropLead(lead.id, payload);
+      Alert.alert('Success', 'Lead Dropped');
+      navigation.goBack();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to drop lead. Please try again.');
+      console.error(error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <AppHeader leftIcon="arrow-left" onLeftPress={() => navigation.goBack()} title="Drop Lead" />
-      <ScrollView contentContainerStyle={[styles.scrollContent, { maxWidth, alignSelf: 'center', width: '100%' }]}>
+      <AppHeader leftIcon="arrow-left" onLeftPress={() => navigation.goBack()} title="Drop / Disqualify Lead" />
+      <ScrollView contentContainerStyle={[styles.scrollContent, { maxWidth, alignSelf: 'center', width: '100%' }]} keyboardShouldPersistTaps="handled">
         <LeadInfoCard name={lead?.first_name} phone={lead?.phone} />
         
         <SectionTitle title="Drop Details" />
-        <View style={styles.formGroupSingle}>
+        <View style={[styles.formGroupSingle, { zIndex: 10 }]}>
           <Text style={styles.inputLabel}>Reason for Drop <Text style={styles.required}>*</Text></Text>
-          <TouchableOpacity style={styles.pickerBox}><Text style={styles.pickerText}>Select Reason</Text><Icon name="chevron-down" size={20} color={colors.textSecondary} /></TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.pickerBox}
+            onPress={() => setShowReasonDropdown(!showReasonDropdown)}
+          >
+            <Text style={styles.pickerText}>{reason}</Text>
+            <Icon name={showReasonDropdown ? "chevron-up" : "chevron-down"} size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+          
+          {showReasonDropdown && (
+            <View style={styles.dropdownListContainer}>
+              <TouchableOpacity style={styles.dropdownListItem} onPress={() => { setReason('Select Reason'); setShowReasonDropdown(false); }}>
+                <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                  {reason === 'Select Reason' && <Icon name="check" size={16} color={colors.text} style={{marginRight: 8}} />}
+                  <Text style={[styles.dropdownListText, reason === 'Select Reason' && styles.dropdownListTextActive, { marginLeft: reason === 'Select Reason' ? 0 : 24 }]}>Select Reason</Text>
+                </View>
+              </TouchableOpacity>
+              {REASONS_FOR_DROP.map((r, idx) => (
+                <TouchableOpacity key={idx} style={styles.dropdownListItem} onPress={() => { setReason(r); setShowReasonDropdown(false); }}>
+                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                    {reason === r && <Icon name="check" size={16} color={colors.text} style={{marginRight: 8}} />}
+                    <Text style={[styles.dropdownListText, reason === r && styles.dropdownListTextActive, { marginLeft: reason === r ? 0 : 24 }]}>{r}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
         
-        <View style={styles.formGroupSingle}>
+        <View style={[styles.formGroupSingle, { marginTop: showReasonDropdown ? 350 : 0 }]}>
           <Text style={styles.inputLabel}>Additional Remarks / Feedback</Text>
-          <TextInput style={[styles.textInput, {height: 120}]} placeholder="Explain the specific reason in detail so marketing/management can analyze..." multiline textAlignVertical="top" />
+          <TextInput 
+            style={[styles.textInput, {height: 120}]} 
+            placeholder="Explain the specific reason in detail so marketing/management can analyze..." 
+            multiline 
+            textAlignVertical="top" 
+            value={remarks}
+            onChangeText={setRemarks}
+          />
         </View>
         
         <View style={styles.footerRow}>
-          <TouchableOpacity style={styles.btnCancel} onPress={() => navigation.goBack()}><Text style={styles.btnCancelText}>Cancel</Text></TouchableOpacity>
-          <TouchableOpacity style={[styles.btnPrimary, {backgroundColor: colors.error}]} onPress={() => { Alert.alert('Success', 'Lead Dropped'); navigation.goBack(); }}><Text style={styles.btnPrimaryText}>Mark as Dropped</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.btnCancel} onPress={() => navigation.goBack()} disabled={isSubmitting}>
+            <Text style={styles.btnCancelText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.btnPrimary, { backgroundColor: colors.error, opacity: isSubmitting ? 0.7 : 1 }]} 
+            onPress={handleDropLead}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color={colors.surface} />
+            ) : (
+              <Text style={styles.btnPrimaryText}>Mark as Dropped</Text>
+            )}
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
@@ -304,6 +393,11 @@ const styles = StyleSheet.create({
   pickerText: { fontSize: typography.sizes.m, color: colors.text },
   helperText: { fontSize: 11, color: colors.textMuted, marginTop: 4, marginLeft: 2 },
   
+  dropdownListContainer: { position: 'absolute', top: 80, left: 0, right: 0, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingVertical: spacing.s, zIndex: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 5 },
+  dropdownListItem: { paddingVertical: 12, paddingHorizontal: spacing.m },
+  dropdownListText: { fontSize: typography.sizes.m, color: colors.text, fontWeight: '500' },
+  dropdownListTextActive: { color: colors.primary, fontWeight: 'bold' },
+
   activityCard: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.m, marginBottom: spacing.l },
   activityHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.xs },
   activityType: { fontSize: typography.sizes.s, fontWeight: typography.weights.bold, color: colors.text },

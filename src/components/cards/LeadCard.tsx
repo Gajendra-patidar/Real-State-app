@@ -82,12 +82,15 @@ export const LeadCard: React.FC<LeadCardProps> = ({
 
       <View style={styles.footer}>
         <TouchableOpacity 
-          style={[styles.statusBadge, {backgroundColor: getStatusColor() + '20'}]}
+          style={[
+            styles.statusBadge, 
+            {backgroundColor: getStatusColor() + '20', opacity: (status || '').toUpperCase() === 'LOST' ? 0.7 : 1}
+          ]}
           onPress={onStatusPress}
-          disabled={!onStatusPress}
+          disabled={!onStatusPress || (status || '').toUpperCase() === 'LOST'}
         >
           <Text style={[styles.statusText, {color: getStatusColor()}]}>
-            {status} {onStatusPress && '▼'}
+            {status} {onStatusPress && (status || '').toUpperCase() !== 'LOST' && '▼'}
           </Text>
         </TouchableOpacity>
 
@@ -99,7 +102,11 @@ export const LeadCard: React.FC<LeadCardProps> = ({
         )}
 
         {onActionPress && (
-          <TouchableOpacity style={styles.actionBtn} onPress={onActionPress}>
+          <TouchableOpacity 
+            style={[styles.actionBtn, { opacity: (status || '').toUpperCase() === 'LOST' ? 0.5 : 1 }]} 
+            onPress={onActionPress}
+            disabled={(status || '').toUpperCase() === 'LOST'}
+          >
             <Icon name="lightning-bolt" size={14} color={colors.warning} />
             <Text style={styles.actionBtnText}>Actions</Text>
           </TouchableOpacity>

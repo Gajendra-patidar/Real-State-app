@@ -11,14 +11,21 @@ import { spacing } from '../../theme/spacing';
 
 
 import { chatApi } from '../../services/api/chatApi';
-import { dashboardApi } from '../../services/api/dashboardApi';
+
+
+const USERS = [
+  { id: 1, name: 'Amit Kulkarni (Executive 5)', role: {name: 'Sales Executive'}, email: 'amit.exec@apexrealty.com' },
+  { id: 2, name: 'Anil Verma (Admin)', role: {name: 'Admin'}, email: 'admin@apexrealty.com' },
+  { id: 3, name: 'Anjali Mehta (Manager)', role: {name: 'Manager'}, email: 'anjali.manager@apexrealty.com' },
+  { id: 4, name: 'Deepika Roy (Executive 7)', role: {name: 'Sales Executive'}, email: 'deepika.exec@apexrealty.com' },
+];
 
 export const SalesExecutiveTeamChatScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   
   const [activeChats, setActiveChats] = useState<any[]>([]);
-  const [usersList, setUsersList] = useState<any[]>([]);
+  const [usersList, setUsersList] = useState<any[]>(USERS);
   const [loading, setLoading] = useState(true);
 
   const [activeFilter, setActiveFilter] = useState('All');
@@ -33,60 +40,115 @@ export const SalesExecutiveTeamChatScreen = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const chatRes = await chatApi.getConversations();
-      setActiveChats(chatRes.data || []);
-      
-      const teamRes = await dashboardApi.getManagerExecutives();
-      setUsersList(teamRes.data?.data || []);
+      const [chatRes, usersRes] = await Promise.all([
+        chatApi.getConversations(),
+        chatApi.getUsers()
+      ]);
+      console.log('Fetched chats:', chatRes);
+      let chats = [];
+      if (chatRes?.conversations && Array.isArray(chatRes.conversations)) {
+        chats = chatRes.conversations;
+      } else if (Array.isArray(chatRes)) {
+        chats = chatRes;
+      } else if (chatRes?.data) {
+        chats = chatRes.data;
+      }
+      setActiveChats(chats);
+      setUsersList(usersRes?.data?.data || usersRes?.data || []);
     } catch (error) {
       console.log('Error fetching chat data', error);
       setActiveChats([]);
-      setUsersList([]);
     } finally {
       setLoading(false);
     }
   };
 
   const handleStartDirectChat = async (user: any) => {
-    setIsDirectModalVisible(false);
     try {
-      await chatApi.startDirectChat({ user_id: user.id });
-      fetchData(); // Refresh list after starting
-      navigation.navigate('ChatRoom', { name: user.name, role: user.role?.name || 'User', isGroup: false });
+      setLoading(true);
+      // Start or fetch the existing single chat with this user
+      const response = await chatApi.startSingleChat({ user_id: user.id });
+      
+      setIsDirectModalVisible(false);
+      
+      // The API returns the new or existing chat ID. Usually it is response.id or response.chat_id or response.data.id
+      const actualChatId = response?.id || response?.chat_id || response?.data?.id || response;
+      
+      navigation.navigate('ChatRoom', { 
+        chatId: actualChatId, 
+        name: user.name, 
+        role: user.role?.name || 'User', 
+        isGroup: false 
+      });
+      fetchData(); // Refresh the list
     } catch (error) {
-      console.log('Error starting direct chat', error);
-      Alert.alert('Error', 'Failed to start chat');
+      console.log('Error starting direct chat:', error);
+      Alert.alert('Error', 'Failed to start chat with this user.');
+      setIsDirectModalVisible(false);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const renderChatCard = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-      style={styles.chatCard}
-      onPress={() => navigation.navigate('ChatRoom', { name: item.name, role: item.role, isGroup: item.isGroup })}
-    >
-      <View style={styles.avatar}>
-        {item.isGroup ? (
-          <Icon name="account-group" size={20} color="#059669" />
-        ) : (
-          <Text style={styles.avatarText}>{item.name.substring(0, 1)}</Text>
-        )}
-      </View>
-      <View style={styles.chatDetails}>
-        <Text style={styles.chatName}>{item.name}</Text>
-        <Text style={styles.chatLastMessage}>{item.lastMessage}</Text>
-      </View>
-      <View style={styles.chatBadge}>
-        <Text style={styles.chatBadgeText}>{item.role}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+  
+  const displayedChats = activeChats.filter(chat => {
+    const isGroup = chat.type === 'group' || chat.is_group;
+    const matchesSearch = !searchQuery || chat.name?.toLowerCase().includes(searchQuery.toLowerCase()) || chat.title?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    if (activeFilter === 'Direct' && isGroup) return false;
+    if (activeFilter === 'Groups' && !isGroup) return false;
+    
+    return matchesSearch;
+  });
+
+  const renderChatCard = ({ item, index }: { item: any, index: number }) => {
+    const isGroup = item.type === 'group' || item.is_group;
+    const role = item.other_user_role || item.role || (isGroup ? 'Group' : 'Direct');
+    const lastMsg = typeof item.last_message === 'string' ? item.last_message : (item.last_message?.message || item.lastMessage || 'No messages yet');
+    
+    return (
+      <TouchableOpacity 
+        style={styles.chatCard}
+        onPress={() => navigation.navigate('ChatRoom', { chatId: item.id || item.chat_id || index, name: item.name || item.title || 'Chat', role: role, isGroup: isGroup })}
+      >
+        <View style={styles.avatar}>
+          {isGroup ? (
+            <Icon name="account-group" size={20} color="#059669" />
+          ) : (
+            <Text style={styles.avatarText}>{(item.name || item.title || 'C').substring(0, 1).toUpperCase()}</Text>
+          )}
+        </View>
+        
+        <View style={styles.chatDetails}>
+          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4}}>
+            <Text style={styles.chatName} numberOfLines={1}>{(item.name || item.title || 'Chat')}</Text>
+            {item.last_message_time ? (
+              <Text style={{fontSize: 10, color: '#94A3B8'}}>{item.last_message_time}</Text>
+            ) : null}
+          </View>
+          <Text style={styles.chatLastMessage} numberOfLines={1}>{lastMsg}</Text>
+        </View>
+        
+        <View style={{alignItems: 'flex-end', justifyContent: 'center', marginLeft: 8}}>
+          <View style={styles.chatBadge}>
+            <Text style={styles.chatBadgeText} numberOfLines={1}>{role}</Text>
+          </View>
+          {item.unread_count > 0 && (
+            <View style={{backgroundColor: '#EF4444', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, marginTop: 4, minWidth: 20, alignItems: 'center'}}>
+              <Text style={{color: '#FFF', fontSize: 10, fontWeight: 'bold'}}>{item.unread_count}</Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
       <AppHeader leftIcon="arrow-left" onLeftPress={() => navigation.goBack()} title="Team & Broker Chat" />
 
       <FlatList
-        data={activeChats}
+        data={displayedChats}
         keyExtractor={item => item.id.toString()}
         contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
         refreshing={loading}
@@ -191,7 +253,7 @@ const styles = StyleSheet.create({
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#D1FAE5', justifyContent: 'center', alignItems: 'center', marginRight: spacing.m },
   avatarText: { fontSize: typography.sizes.l, fontWeight: 'bold', color: '#059669' },
   chatDetails: { flex: 1 },
-  chatName: { fontSize: typography.sizes.m, fontWeight: 'bold', color: colors.text, marginBottom: 4 },
+  chatName: { fontSize: typography.sizes.m, fontWeight: 'bold', color: colors.text, flex: 1, marginRight: 8 },
   chatLastMessage: { fontSize: typography.sizes.s, color: colors.textMuted },
   chatBadge: { backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   chatBadgeText: { fontSize: 10, fontWeight: 'bold', color: colors.textSecondary },

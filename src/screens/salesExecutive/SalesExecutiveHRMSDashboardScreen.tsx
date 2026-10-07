@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppHeader } from '../../components/common/AppHeader';
@@ -11,6 +12,34 @@ import { spacing } from '../../theme/spacing';
 export const SalesExecutiveHRMSDashboardScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const [isClockedIn, setIsClockedIn] = useState(false);
+  const [clockInTime, setClockInTime] = useState<Date | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadClockState();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  const loadClockState = async () => {
+    try {
+      const clockedIn = await AsyncStorage.getItem('isClockedIn');
+      const time = await AsyncStorage.getItem('clockInTime');
+      if (clockedIn === 'true' && time) {
+        setIsClockedIn(true);
+        setClockInTime(new Date(time));
+      } else {
+        setIsClockedIn(false);
+        setClockInTime(null);
+      }
+    } catch (e) {
+      console.log('Failed to load clock state');
+    }
+  };
+
+  const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
 
   return (
     <View style={styles.container}>
@@ -29,12 +58,20 @@ export const SalesExecutiveHRMSDashboardScreen = () => {
           <View style={styles.shiftHeader}>
             <Text style={styles.shiftTitle}>MY SHIFT</Text>
             <View style={styles.dateBadge}>
-              <Text style={styles.dateBadgeText}>Wed, Sep 30, 2026</Text>
+              <Text style={styles.dateBadgeText}>{todayStr}</Text>
             </View>
           </View>
           
-          <Text style={styles.shiftStatus}>Off the clock</Text>
-          <Text style={styles.shiftDesc}>Head over to the Attendance page to start your shift.</Text>
+          <Text style={styles.shiftStatus}>
+            {isClockedIn && clockInTime 
+              ? `Started at ${clockInTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+              : 'Off the clock'}
+          </Text>
+          <Text style={styles.shiftDesc}>
+            {isClockedIn 
+              ? 'You are currently on the clock.'
+              : 'Head over to the Attendance page to start your shift.'}
+          </Text>
 
           <TouchableOpacity style={styles.shiftBtn} onPress={() => navigation.navigate('HRMSAttendance')}>
             <Icon name="account-clock" size={20} color="#FFF" style={{marginRight: 8}} />
@@ -55,10 +92,10 @@ export const SalesExecutiveHRMSDashboardScreen = () => {
               <Text style={styles.actionBtnLeaveText}>Leave Management</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionBtnSalary} onPress={() => navigation.navigate('HRMSPayroll')}>
+            {/* <TouchableOpacity style={styles.actionBtnSalary} onPress={() => navigation.navigate('HRMSPayroll')}>
               <Icon name="file-document-outline" size={32} color="#059669" style={{marginBottom: 8}} />
               <Text style={styles.actionBtnSalaryText}>Salary Slips</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </View>
         </View>
 

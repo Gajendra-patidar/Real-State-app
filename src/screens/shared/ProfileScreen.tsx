@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   Switch,
+  ActivityIndicator,
   Dimensions,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ import {useNavigation} from '@react-navigation/native';
 import {logout} from '../../store/slices/authSlice';
 import {useAuth} from '../../hooks/useAuth';
 import {authApi} from '../../services/api/authApi';
+import {brokerApi} from '../../services/api/brokerApi';
 import {AppHeader} from '../../components/common/AppHeader';
 import {colors} from '../../theme/colors';
 import {typography} from '../../theme/typography';
@@ -34,6 +36,7 @@ import {
   HelpCircle,
   Info,
   Edit3,
+  Banknote,
 } from 'lucide-react-native';
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
@@ -53,6 +56,20 @@ export const ProfileScreen = () => {
   const {user, role} = useAuth();
   const [notifications, setNotifications] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [brokerProfile, setBrokerProfile] = useState<any>(null);
+  const [loadingBroker, setLoadingBroker] = useState(false);
+  
+  React.useEffect(() => {
+    if (role === 'broker') {
+      setLoadingBroker(true);
+      brokerApi.getBrokerProfile()
+        .then(res => {
+          if (res?.broker) setBrokerProfile(res.broker);
+        })
+        .catch(err => console.log('Failed to fetch broker profile', err))
+        .finally(() => setLoadingBroker(false));
+    }
+  }, [role]);
 
   const roleInfo = ROLE_LABELS[role || ''] ?? {label: role || 'User', color: colors.textSecondary, bg: colors.border};
   const userName = user?.name || 'User';
@@ -194,21 +211,34 @@ export const ProfileScreen = () => {
           <InfoRow
             icon={<Phone size={16} color={colors.success} />}
             label="Phone"
-            value={user?.phone || 'Not set'}
+            value={brokerProfile?.phone || user?.phone || 'Not set'}
           />
-          <View style={styles.rowDivider} />
-          <InfoRow
-            icon={<Building2 size={16} color={colors.warning} />}
-            label="Company ID"
-            value={user?.company_id ? `#${user.company_id}` : 'Not assigned'}
-          />
+          
           <View style={styles.rowDivider} />
           <InfoRow
             icon={<Shield size={16} color={roleInfo.color} />}
             label="Role"
             value={roleInfo.label}
           />
+          
         </View>
+
+        
+        
+        {/* ── Business & Earnings ─────────────────────────────────── */}
+        {role === 'broker' && (
+          <>
+            <SectionHeader title="BUSINESS & EARNINGS" />
+            <View style={styles.card}>
+              <ActionRow
+                icon={<Banknote size={16} color={colors.success} />}
+                iconBg={colors.successLight}
+                label="My Commissions"
+                onPress={() => navigation.navigate('Commission')}
+              />
+            </View>
+          </>
+        )}
 
         {/* ── Preferences ───────────────────────────────────────────── */}
         <SectionHeader title="PREFERENCES" />
@@ -248,15 +278,6 @@ export const ProfileScreen = () => {
         <SectionHeader title="SECURITY & SUPPORT" />
         <View style={styles.card}>
           <ActionRow
-            icon={<Lock size={16} color={colors.secondary} />}
-            iconBg={colors.infoLight}
-            label="Change Password"
-            onPress={() =>
-              Alert.alert('Change Password', 'Please contact your administrator to change your password.')
-            }
-          />
-          <View style={styles.rowDivider} />
-          <ActionRow
             icon={<HelpCircle size={16} color={colors.success} />}
             iconBg={colors.successLight}
             label="Help & Support"
@@ -273,7 +294,7 @@ export const ProfileScreen = () => {
           />
         </View>
 
-        {/* ── Logout Button ─────────────────────────────────────────── */}
+{/* ── Logout Button ─────────────────────────────────────────── */}
         <TouchableOpacity
           style={styles.logoutBtn}
           onPress={handleLogout}

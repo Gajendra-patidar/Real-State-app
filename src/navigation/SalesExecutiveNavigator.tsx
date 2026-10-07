@@ -9,11 +9,13 @@ import {SalesExecutiveSupportDeskScreen} from '../screens/salesExecutive/SalesEx
 import {SalesExecutiveProjectInventoryScreen} from '../screens/salesExecutive/SalesExecutiveProjectInventoryScreen';
 import {SalesExecutiveProjectShowcaseScreen} from '../screens/salesExecutive/SalesExecutiveProjectShowcaseScreen';
 import {SalesExecutiveNegotiationsScreen} from '../screens/salesExecutive/SalesExecutiveNegotiationsScreen';
+import {SalesExecutiveBookingsScreen} from '../screens/salesExecutive/SalesExecutiveBookingsScreen';
 import {SalesExecutiveReportsScreen} from '../screens/salesExecutive/SalesExecutiveReportsScreen';
 import {SalesExecutiveActivityLogScreen} from '../screens/salesExecutive/SalesExecutiveActivityLogScreen';
 
 import {SalesExecutiveTeamChatScreen} from '../screens/salesExecutive/SalesExecutiveTeamChatScreen';
 import {SalesExecutivePermissionsScreen} from '../screens/salesExecutive/SalesExecutivePermissionsScreen';
+import {ManagerChatRoomScreen} from '../screens/manager/ManagerChatRoomScreen';
 import {SalesExecutiveHRMSDashboardScreen} from '../screens/salesExecutive/SalesExecutiveHRMSDashboardScreen';
 import {SalesExecutiveHRMSAttendanceScreen} from '../screens/salesExecutive/SalesExecutiveHRMSAttendanceScreen';
 import {SalesExecutiveHRMSLeaveManagementScreen} from '../screens/salesExecutive/SalesExecutiveHRMSLeaveManagementScreen';
@@ -105,6 +107,7 @@ export const SalesExecutiveNavigator = () => (
     <Stack.Screen name="ProjectInventory" component={SalesExecutiveProjectInventoryScreen} />
     <Stack.Screen name="ProjectShowcase" component={SalesExecutiveProjectShowcaseScreen} />
     <Stack.Screen name="Negotiations" component={SalesExecutiveNegotiationsScreen} />
+    <Stack.Screen name="Bookings" component={SalesExecutiveBookingsScreen} />
     <Stack.Screen name="Tasks" component={SalesExecutiveTasksScreen} />
     <Stack.Screen name="HRMSDashboard" component={SalesExecutiveHRMSDashboardScreen} />
     <Stack.Screen name="HRMSAttendance" component={SalesExecutiveHRMSAttendanceScreen} />
@@ -112,6 +115,7 @@ export const SalesExecutiveNavigator = () => (
     <Stack.Screen name="HRMSPayroll" component={SalesExecutiveHRMSPayrollScreen} />
     <Stack.Screen name="SupportDesk" component={SalesExecutiveSupportDeskScreen} />
     <Stack.Screen name="TeamChat" component={SalesExecutiveTeamChatScreen} />
+    <Stack.Screen name="ChatRoom" component={ManagerChatRoomScreen} />
     <Stack.Screen name="Permissions" component={SalesExecutivePermissionsScreen} />
     <Stack.Screen name="Reports" component={SalesExecutiveReportsScreen} />
     <Stack.Screen name="ActivityLog" component={SalesExecutiveActivityLogScreen} />

@@ -21,14 +21,24 @@ export const ManagerSiteVisitsScreen = () => {
   const navigation = useNavigation<any>();
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterVisible, setIsFilterVisible] = useState(false);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
 
-  // Date Picker State
-  const [datePickerVisible, setDatePickerVisible] = useState(false);
-  const [activeDateField, setActiveDateField] = useState<'visitFrom' | 'visitTo' | 'nextFollowDt' | null>(null);
-  
-  const [visitFromDate, setVisitFromDate] = useState<Date | null>(null);
-  const [visitToDate, setVisitToDate] = useState<Date | null>(null);
-  const [nextFollowDtDate, setNextFollowDtDate] = useState<Date | null>(null);
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  const loadProjects = async () => {
+    try {
+      const { salesExecutiveApi } = require('../../services/api/salesExecutiveApi');
+      const res = await salesExecutiveApi.getProjects();
+      setProjects(res?.data || res || []);
+    } catch (e) {
+      console.log('Failed to load projects for filter');
+    }
+  };
+
+
 
   // Feedback Modal State
   const [isFeedbackModalVisible, setIsFeedbackModalVisible] = useState(false);
@@ -36,17 +46,7 @@ export const ManagerSiteVisitsScreen = () => {
   const [rating, setRating] = useState(0);
   const [feedbackText, setFeedbackText] = useState('');
 
-  const openDatePicker = (field: 'visitFrom' | 'visitTo' | 'nextFollowDt') => {
-    setActiveDateField(field);
-    setDatePickerVisible(true);
-  };
 
-  const handleDateSelect = (date: Date) => {
-    if (activeDateField === 'visitFrom') setVisitFromDate(date);
-    if (activeDateField === 'visitTo') setVisitToDate(date);
-    if (activeDateField === 'nextFollowDt') setNextFollowDtDate(date);
-    setDatePickerVisible(false);
-  };
 
   const formatDate = (date: Date | null) => {
     if (!date) return 'dd/mm/yyyy';
@@ -175,146 +175,26 @@ export const ManagerSiteVisitsScreen = () => {
             </View>
             
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xxl }}>
-              <View style={styles.filterRow}>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Source</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>Select Source</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Lead</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>Select Lead</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-              </View>
+              <Text style={{ fontSize: typography.sizes.m, fontWeight: 'bold', color: colors.text, marginBottom: spacing.m }}>Select Project to Filter</Text>
+              
+              <TouchableOpacity 
+                style={[styles.filterDropdown, selectedProjectId === null && { borderColor: colors.primary, backgroundColor: colors.primary + '10' }, { marginBottom: spacing.s }]} 
+                onPress={() => setSelectedProjectId(null)}
+              >
+                <Text style={[styles.filterDropdownText, selectedProjectId === null && { color: colors.primary, fontWeight: 'bold' }]}>All Projects</Text>
+                {selectedProjectId === null && <Icon name="check-circle" size={20} color={colors.primary} />}
+              </TouchableOpacity>
 
-              <View style={styles.filterRow}>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Assign By</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>Select Assign By</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Site Visited By</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>-SELECT-</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.filterRow}>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Interested in</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>Select</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Inquiry Code</Text>
-                  <TextInput style={styles.filterInput} placeholder="Code" placeholderTextColor={colors.textMuted} />
-                </View>
-              </View>
-
-              <View style={styles.filterRow}>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Inquiry Status</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>Select status</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Visit From</Text>
-                  <TouchableOpacity style={styles.filterDropdown} onPress={() => openDatePicker('visitFrom')}>
-                    <Text style={styles.filterDropdownText} numberOfLines={1}>{formatDate(visitFromDate)}</Text>
-                    <Icon name="calendar" size={18} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.filterRow}>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Visit To</Text>
-                  <TouchableOpacity style={styles.filterDropdown} onPress={() => openDatePicker('visitTo')}>
-                    <Text style={styles.filterDropdownText} numberOfLines={1}>{formatDate(visitToDate)}</Text>
-                    <Icon name="calendar" size={18} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Next Follow Dt</Text>
-                  <TouchableOpacity style={styles.filterDropdown} onPress={() => openDatePicker('nextFollowDt')}>
-                    <Text style={styles.filterDropdownText} numberOfLines={1}>{formatDate(nextFollowDtDate)}</Text>
-                    <Icon name="calendar" size={18} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.filterRow}>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Project</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>Select Project</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Budget Upto</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>Select Budget</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.filterRow}>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Status</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>Pending</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>State</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>Select State</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.filterRow}>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>City</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>Select City</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Purpose</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>- ALL -</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.filterRow}>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Locality</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>- ALL -</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Broker</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>- ALL -</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.filterRow}>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Size/Area</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>- ALL -</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>FB Page</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>- ALL -</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.filterRow}>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>FB Form</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>- ALL -</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Resource</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>Select Resource</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.filterRow}>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Mode</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>Select All</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-                <View style={styles.filterCol}>
-                  <Text style={styles.filterLabel}>Stage</Text>
-                  <TouchableOpacity style={styles.filterDropdown}><Text style={styles.filterDropdownText} numberOfLines={1}>Select All</Text><Icon name="chevron-down" size={18} color={colors.textSecondary} /></TouchableOpacity>
-                </View>
-              </View>
+              {projects.map((proj: any) => (
+                <TouchableOpacity 
+                  key={proj.id}
+                  style={[styles.filterDropdown, selectedProjectId === proj.id && { borderColor: colors.primary, backgroundColor: colors.primary + '10' }, { marginBottom: spacing.s }]} 
+                  onPress={() => setSelectedProjectId(proj.id)}
+                >
+                  <Text style={[styles.filterDropdownText, selectedProjectId === proj.id && { color: colors.primary, fontWeight: 'bold' }]}>{proj.name}</Text>
+                  {selectedProjectId === proj.id && <Icon name="check-circle" size={20} color={colors.primary} />}
+                </TouchableOpacity>
+              ))}
             </ScrollView>
 
             <TouchableOpacity style={styles.applyFilterBtn} onPress={() => setIsFilterVisible(false)}>
@@ -415,16 +295,6 @@ export const ManagerSiteVisitsScreen = () => {
         </View>
       </Modal>
 
-      <DatePickerModal
-        visible={datePickerVisible}
-        onClose={() => setDatePickerVisible(false)}
-        onSelect={handleDateSelect}
-        initialDate={
-          activeDateField === 'visitFrom' ? (visitFromDate || new Date()) :
-          activeDateField === 'visitTo' ? (visitToDate || new Date()) :
-          (nextFollowDtDate || new Date())
-        }
-      />
     </View>
   );
 };

@@ -141,9 +141,12 @@ export const LoginScreen = () => {
     setLoading(true);
     try {
       const data = await authApi.login({email, password});
+      console.log('Login response:', data);
+
       if (data.status === 'success' && data.token && data.user) {
         await AsyncStorage.setItem('auth_token', data.token);
         await AsyncStorage.setItem('user', JSON.stringify(data.user));
+
         dispatch(setCredentials({user: data.user, token: data.token}));
       } else {
         Alert.alert('Login Failed', data.message || 'Invalid credentials. Please try again.');

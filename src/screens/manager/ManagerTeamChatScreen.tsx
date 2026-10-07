@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, ScrollView, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -8,22 +8,24 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
 
-const USERS = [
-  { id: '1', name: 'Amit Kulkarni (Executive 5)', role: 'Sales Executive', email: 'amit.exec@apexrealty.com' },
-  { id: '2', name: 'Anil Verma (Admin)', role: 'Admin', email: 'admin@apexrealty.com' },
-  { id: '3', name: 'Anjali Mehta (Sales Manager 3)', role: 'Manager', email: 'anjali.manager@apexrealty.com' },
-  { id: '4', name: 'Deepika Roy (Executive 7)', role: 'Sales Executive', email: 'deepika.exec@apexrealty.com' },
-];
+import { chatApi } from '../../services/api/chatApi';
+import { dashboardApi } from '../../services/api/dashboardApi';
 
-const ACTIVE_CHATS = [
-  { id: 'c1', name: 'Amit Kulkarni (Executive 5)', role: 'Sales Executive', isGroup: false, lastMessage: 'No messages yet' },
-  { id: 'c2', name: 'Anil Verma (Admin)', role: 'Admin', isGroup: false, lastMessage: 'No messages yet' },
+const USERS = [
+  { id: 1, name: 'Amit Kulkarni (Executive 5)', role: {name: 'Sales Executive'}, email: 'amit.exec@apexrealty.com' },
+  { id: 2, name: 'Anil Verma (Admin)', role: {name: 'Admin'}, email: 'admin@apexrealty.com' },
+  { id: 3, name: 'Anjali Mehta (Manager)', role: {name: 'Manager'}, email: 'anjali.manager@apexrealty.com' },
+  { id: 4, name: 'Deepika Roy (Executive 7)', role: {name: 'Sales Executive'}, email: 'deepika.exec@apexrealty.com' },
 ];
 
 export const ManagerTeamChatScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   
+  const [activeChats, setActiveChats] = useState<any[]>([]);
+  const [usersList, setUsersList] = useState<any[]>(USERS);
+  const [loading, setLoading] = useState(true);
+
   const [activeFilter, setActiveFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -31,45 +33,94 @@ export const ManagerTeamChatScreen = () => {
   const [isGroupModalVisible, setIsGroupModalVisible] = useState(false);
 
   const [groupName, setGroupName] = useState('');
-  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
+  const [selectedParticipants, setSelectedParticipants] = useState<number[]>([]);
 
-  const toggleParticipant = (id: string) => {
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [chatRes, usersRes] = await Promise.all([
+        chatApi.getConversations(),
+        chatApi.getUsers()
+      ]);
+      setActiveChats(chatRes?.data || []);
+      setUsersList(usersRes?.data?.data || usersRes?.data || []);
+    } catch (error) {
+      console.log('Error fetching chat data', error);
+      // Fallback data if needed
+      setActiveChats([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleParticipant = (id: number) => {
     setSelectedParticipants(prev => 
       prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
     );
   };
 
-  const handleStartDirectChat = (user: typeof USERS[0]) => {
+  const handleStartDirectChat = async (user: any) => {
     setIsDirectModalVisible(false);
-    navigation.navigate('ChatRoom', { name: user.name, role: user.role, isGroup: false });
+    navigation.navigate('ChatRoom', { 
+      chatId: user.id, 
+      name: user.name, 
+      role: user.role?.name || 'User', 
+      isGroup: false 
+    });
   };
 
-  const handleCreateGroup = () => {
-    if (!groupName.trim()) return;
+  const handleCreateGroup = async () => {
+    if (!groupName.trim() || selectedParticipants.length === 0) {
+      Alert.alert('Error', 'Please provide a group name and select at least one participant.');
+      return;
+    }
+    
     setIsGroupModalVisible(false);
-    navigation.navigate('ChatRoom', { name: groupName, role: 'Group', isGroup: true });
-    setGroupName('');
-    setSelectedParticipants([]);
+    try {
+      const res = await chatApi.createGroupChat({ name: groupName, user_ids: selectedParticipants });
+      fetchData();
+      const resolvedChatId = res?.data?.id || res?.id || res?.chat_id || 1;
+      navigation.navigate('ChatRoom', { chatId: resolvedChatId, name: groupName, role: 'Group', isGroup: true });
+      setGroupName('');
+      setSelectedParticipants([]);
+    } catch (error) {
+      console.error('Error creating group chat', error);
+      Alert.alert('Error', 'Failed to create group');
+    }
   };
 
-  const renderChatCard = ({ item }: { item: typeof ACTIVE_CHATS[0] }) => (
+  const displayedChats = activeChats.filter(chat => {
+    const isGroup = chat.type === 'group' || chat.is_group;
+    const matchesSearch = !searchQuery || chat.name?.toLowerCase().includes(searchQuery.toLowerCase()) || chat.title?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    if (activeFilter === 'Direct' && isGroup) return false;
+    if (activeFilter === 'Groups' && !isGroup) return false;
+    
+    return matchesSearch;
+  });
+
+  const renderChatCard = ({ item, index }: { item: any, index: number }) => (
     <TouchableOpacity 
       style={styles.chatCard}
-      onPress={() => navigation.navigate('ChatRoom', { name: item.name, role: item.role, isGroup: item.isGroup })}
+      onPress={() => navigation.navigate('ChatRoom', { chatId: item.id || item.chat_id || index, name: item.name || item.title || 'Chat', role: item.role || (item.is_group ? 'Group' : 'Direct'), isGroup: item.is_group })}
     >
       <View style={styles.avatar}>
-        {item.isGroup ? (
+        {item.is_group ? (
           <Icon name="account-group" size={20} color="#059669" />
         ) : (
-          <Text style={styles.avatarText}>{item.name.substring(0, 1)}</Text>
+          <Text style={styles.avatarText}>{(item.name || item.title || 'C').substring(0, 1)}</Text>
         )}
       </View>
       <View style={styles.chatDetails}>
-        <Text style={styles.chatName}>{item.name}</Text>
-        <Text style={styles.chatLastMessage}>{item.lastMessage}</Text>
+        <Text style={styles.chatName}>{item.name || item.title || 'Chat'}</Text>
+        <Text style={styles.chatLastMessage}>{item.last_message?.message || item.lastMessage || 'No messages yet'}</Text>
       </View>
       <View style={styles.chatBadge}>
-        <Text style={styles.chatBadgeText}>{item.role}</Text>
+        <Text style={styles.chatBadgeText}>{item.role || (item.is_group ? 'Group' : 'Direct')}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -79,9 +130,11 @@ export const ManagerTeamChatScreen = () => {
       <AppHeader leftIcon="arrow-left" onLeftPress={() => navigation.goBack()} title="Team & Broker Chat" />
 
       <FlatList
-        data={ACTIVE_CHATS}
-        keyExtractor={item => item.id}
+        data={displayedChats}
+        keyExtractor={item => item.id.toString()}
         contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+        refreshing={loading}
+        onRefresh={fetchData}
         ListHeaderComponent={
           <>
             <View style={styles.headerSubtitleBox}>
@@ -142,11 +195,11 @@ export const ManagerTeamChatScreen = () => {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.l }}>
-              {USERS.map(user => (
+              {usersList.map(user => (
                 <TouchableOpacity key={user.id} style={styles.userListItem} onPress={() => handleStartDirectChat(user)}>
                   <View style={{flex: 1}}>
                     <Text style={styles.userName}>{user.name}</Text>
-                    <Text style={styles.userRoleEmail}>{user.role} • {user.email}</Text>
+                    <Text style={styles.userRoleEmail}>{user.role?.name || 'User'} • {user.email}</Text>
                   </View>
                   <Icon name="chevron-right" size={20} color={colors.textMuted} />
                 </TouchableOpacity>
@@ -183,13 +236,13 @@ export const ManagerTeamChatScreen = () => {
 
               <Text style={styles.inputLabel}>SELECT PARTICIPANTS</Text>
               <View style={styles.participantsBox}>
-                {USERS.map(user => (
+                {usersList.map(user => (
                   <TouchableOpacity key={user.id} style={styles.participantItem} onPress={() => toggleParticipant(user.id)}>
                     <View style={[styles.checkbox, selectedParticipants.includes(user.id) && styles.checkboxActive]}>
                       {selectedParticipants.includes(user.id) && <Icon name="check" size={14} color="#FFF" />}
                     </View>
                     <Text style={styles.participantName}>{user.name}</Text>
-                    <Text style={styles.participantRole}>({user.role})</Text>
+                    <Text style={styles.participantRole}>({user.role?.name || 'User'})</Text>
                   </TouchableOpacity>
                 ))}
               </View>

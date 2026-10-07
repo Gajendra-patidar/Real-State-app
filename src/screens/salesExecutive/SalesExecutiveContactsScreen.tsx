@@ -2,8 +2,9 @@ import React, {useEffect, useState} from 'react';
 import {View, Text, StyleSheet, FlatList, ActivityIndicator} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useNavigation} from '@react-navigation/native';
+import {chatApi} from '../../services/api/chatApi';
 import {AppHeader} from '../../components/common/AppHeader';
-import {dashboardApi} from '../../services/api/dashboardApi';
+
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {typography} from '../../theme/typography';
@@ -21,8 +22,8 @@ export const SalesExecutiveContactsScreen = () => {
   const fetchTeam = async () => {
     setLoading(true);
     try {
-      const response = await dashboardApi.getManagerExecutives();
-      setTeam(response.data?.data || []);
+      const response = await chatApi.getUsers();
+      setTeam(response?.data?.data || response?.data || []);
     } catch (error) {
       console.log('Error fetching team (fallback)', error);
       setTeam([]);
